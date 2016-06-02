@@ -1,0 +1,8 @@
+#!/bin/bash
+# grep UniProtKB accession numbers
+PATTERN="[OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9]([A-Z][A-Z0-9]{2}[0-9]){1,2}"
+if [ $# -eq 0 ];then
+    cat|grep -ohP $PATTERN|sort -n |uniq
+else
+    grep -ohP $PATTERN $@ |sort -n |uniq
+fi

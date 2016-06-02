@@ -1,0 +1,40 @@
+'''
+Chengxin's own python/shell scripts repository.
+All scripts are licensed under LGPL v2+.
+All scripts can be directly called by command line.
+When launched without argument, a short documentation will be displayed.
+All python scripts are importable by python.
+'''
+
+#### sequence parsing ####
+fasta2pfam.py      # convert FASTA file to Pfam file
+pfam2fasta.py      # convert Pfam file to FASTA file
+NWalign.py         # global sequence alignment
+seq_similarity.py  # sequence identity matrix for MSA
+split_fasta.py     # split multi sequence FASTA into one sequence FASTA
+
+#### structure parsing ####
+contact_pdb.py     # calculate residue contacts
+reindex_pdb.py     # renumber residue number of PDB file
+fixMSE.py          # fix MSE and other nonstandard residues in PDB
+fetch.py,fetch.sh  # fetch PDB from RCSB PDB according to PDB id, Uniprot 
+                   # accession, or Pfam family id
+reptra2pdb.py      # convert I-TASSER format decoy file rep*.tra*.bz2 to PDB
+superpose.py       # superpose two structures
+initdat2pdb.py     # convert LOMETS threading result init.dat to PDB
+HomologyModelling.py # homology modelling by MODELLER
+strip_sidechain.py # remove side
+
+#### GO parsing ####
+obo2csv.py         # parsing obo format GO defination file
+
+#### regular expression ####
+grep-GO.sh         # uniquely grep all GO terms in plain text
+grep-uniprot.sh    # uniquely grep all uniprot accession in plain text
+
+#### mathematics ultility ####
+load_matrix.py     # load matrix from plain text file
+                   # (obsolete: recommend numpy.loadtxt instead)
+
+#### system ultility ####
+read_mail.py       # read system mail

@@ -1,0 +1,477 @@
+#!/usr/bin/env python
+# 2016-02-27 Chengxin Zhang
+docstring='''
+fetch 4k5y
+    Download PDB 4k5y to 4k5y.pdb
+
+fetch 4k5yA
+    Download PDB 4k5y chain A to 4k5yA.pdb
+
+fetch P34998
+    Download all PDB associated with uniprot ID P34998
+
+fetch PF00406
+    Download all PDB associated with pfam ID PF00406
+
+fetch -outfmt=fasta 4k5y
+    Print FASTA sequence for 4k5y
+
+fetch -outfmt=fasta P34998
+    Print FASTA sequence for P34998
+
+fetch -outfmt=list P34998
+    Print a list of available PDB for P34998
+
+fetch -outfmt=list PF00406
+    Print a list of available PDB for P34998
+
+fetch -include_model=true 163D
+    Download obsolete PDB such as theoretical models
+'''
+import sys,os
+import re
+import gzip
+import tarfile
+from urllib import urlretrieve as wget
+import urllib2
+import shutil
+
+pdb_mirror="ftp://ftp.wwpdb.org/pub/pdb/data/structures/all/pdb/pdb"
+pdb_bundle_mirror="ftp://ftp.wwpdb.org/pub/pdb/compatible/pdb_bundle/"
+uniprot_mirror="http://www.uniprot.org/uniprot/"
+pdbe_mirror="http://www.ebi.ac.uk/pdbe-srv/view/entry/"
+rcsb_fasta_mirror="http://www.rcsb.org/pdb/files/fasta.txt?structureIdList="
+rcsb_pdb_mirror="http://www.rcsb.org/pdb/files/"
+pdb_pfam_mapping_mirror="http://www.rcsb.org/pdb/rest/hmmer?file=hmmer_pdb_all.txt"
+obsolete_mirror="ftp://ftp.wwpdb.org/pub/pdb/data/status/obsolete.dat"
+large_split_mirror="ftp://ftp.wwpdb.org/pub/pdb/compatible/pdb_bundle/large_split_mapping.tsv"
+
+pdb_pattern=re.compile("^\d\w{3}$")
+pdb_chain_pattern=re.compile("^\d\w{4,5}$")
+accession_pattern=re.compile(# uniprot accession (AC)
+    "^[OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9]([A-Z][A-Z0-9]{2}[0-9]){1,2}$")
+entry_pattern=re.compile("^\w{1,5}_\w{1,5}") # uniprot entry name
+PDBe_entry_pattern=re.compile("www\.ebi\.ac\.uk\/pdbe\-srv\/view/entry/(\d\w{3})[\w\W]+?<td>([/\w]+)<\/td><td><a\s+href=\"\.+.\/blast\/\?about=\w+\[(\d+\-\d+)\]")
+DBREF_pattern=re.compile("DBREF\s\s\d\w{3}\s\w{0,1}\s+(\d+)\s+(\d+)\s+"+ \
+    "UNP\s+(\w+)\s+(\w+_\w+)\s+(\d+)\s+(\d+)\s*")
+PFAM_pattern=re.compile("[Pp][Ff]\d{5}")
+pdb_bundle_pattern=re.compile("\d\w{3}\-pdb\-bundle\d+\.pdb")
+
+chainID_column={ # column to store chainID, 0 for no chainID
+    "DBREF":12, "SEQADV":16, "SEQRES":11, "MODRES":16,# Primary Structure
+    "HET":12,                             # Heterogen
+    "HELIX":19, "SHEET":21,               # Secondary Structure
+    "SSBOND":15, "CONECT":0,              # Connectivity
+    "SITE":22,                            # Miscellaneous
+    "MODEL":0, "ATOM":21, "TER":21, "HETATM":21, "ENDMDL":0, # Coordinate
+    "END":0,                              # Bookkeeping
+}
+
+resSeq_column={ # columns for residue sequence number, 0 for no resSeq
+    "DBREF":(14,18), "SEQADV":(18,22), "MODRES":(18,22), # Primary Structure
+    "HELIX":(21,25), "SHEET":(22,26),       # Secondary Structure 
+    "SSBOND":(17,21), "CONECT":0,           # Connectivity
+    "SITE":(23,27),                         # Miscellaneous
+    "MODEL":0, "ATOM":(22,26), "TER":0, "HETATM":(22,26), "ENDMDL":0, # Coordinate
+    "END":0,                                # Bookkeeping
+}
+
+def fetch_bundle(PDBid,no_err=False):
+    '''fetch Best effort/minimal PDB format files for large structures
+    return the tarball file name. 
+    no_err - whether supress downloading error'''
+    # As large structures (containing >62 chains and/or 99999 ATOM lines) 
+    # cannot be represented in the legacy PDB file format, data are 
+    # available in the PDB archive as single PDBx/mmCIF files representing
+    # the entire structure, and as TAR files containing a collection of 
+    # best effort/minimal files in the PDB file format to support users 
+    # and software tools that rely solely on the PDB file format. 
+    PDBid=PDBid.lower()
+    tarball_name=PDBid+"-pdb-bundle.tar.gz"
+    if not os.path.isfile(tarball_name):
+        try:
+            wget(pdb_bundle_mirror+PDBid[1:3]+'/'+PDBid+'/'+tarball_name
+                ,tarball_name)
+        except Exception,err:
+            if not no_err:
+                sys.stderr.write(str(err)+'\n')
+            return ''
+    return tarball_name
+
+def extract_chain_from_bundle(tarball_name,chainID_list=[]):
+    '''split best effort/minimal PDB tarball into PDB files containing 
+    individual chainID'''
+    # Best effort/minimal PDB format files contain only HEADER, AUTHOR, 
+    # JRNL, CRYST1, SCALEn, ATOM, HETATM records.
+    # The following are not included: OBSLTE, TITLE, CAVEAT, COMPND,
+    # SOURCE, KEYWDS, EXPDTA, REVDAT, SPRSDE, REMARKS, DBREF, SEQADV, 
+    # SEQRES, MODRES, HET, HETNAM, HETSYN, FORMUL, HELIX, SHEET, SSBOND, 
+    # LINK, CISPEP, SITE, ORIGXn, MTRIXn, CONECT.
+    PDBid=tarball_name[:4]
+    chain_id_mapping=dict()
+    PDB_chain_file_list=[]
+    tar=tarfile.open(tarball_name,'r:gz')
+
+    # parse chain id mapping
+    fp=tar.extractfile(PDBid+"-chain-id-mapping.txt")
+    map_txt=fp.read()
+    fp.close()
+    for section in map_txt.split('\n'+PDBid+"-pdb-bundle"):
+        if not ':' in section:
+            continue
+        idx,section=section.split(".pdb:\n")
+        pdb_bundle_name=PDBid+"-pdb-bundle"+idx+".pdb"
+        for line in section.splitlines():
+            New_chain_ID,Original_chain_ID=line.split()
+            chain_id_mapping[Original_chain_ID]=(
+                pdb_bundle_name,New_chain_ID)
+
+    # parse each chain
+    PDB_chain_file_list=[]
+    for Original_chain_ID in chainID_list:
+        if not Original_chain_ID in chain_id_mapping:
+            sys.stderr.write("ERROR! no chain %s in %s\n"%(
+                Original_chain_ID,PDBid))
+            continue
+        pdb_bundle_name,New_chain_ID=chain_id_mapping[Original_chain_ID]
+        PDB_chain_file=PDBid+Original_chain_ID+".pdb"
+        PDB_chain_file_list.append(PDB_chain_file)
+        if os.path.isfile(PDB_chain_file):
+            continue
+       
+        # parse text in *-pdb-bundle*.pdb
+        fp=tar.extractfile(pdb_bundle_name)
+        pdb_lines=fp.read().splitlines()
+        fp.close()
+
+        # extract text for specific chain
+        PDB_txt=''    
+        for line in pdb_lines:
+            section=line.split()[0]
+            if section in chainID_column and (not chainID_column[section] \
+                or line[chainID_column[section]]==New_chain_ID):
+                PDB_txt+=line+'\n'
+
+        # write PDB for individual chain
+        fp=open(PDB_chain_file,'w')
+        fp.write(PDB_txt)
+        fp.close()
+    return PDB_chain_file_list
+
+def obsolete2supersede(PDBid):
+    '''get superseding PDB id instead of obsolete PDBid'''
+    obsolete_dat="obsolete.dat"
+    if not os.path.isfile(obsolete_dat):
+        wget(obsolete_mirror,obsolete_dat)
+
+    PDBid_upper=PDBid.upper()
+    fp=open(obsolete_dat,'rU')
+    obsolete_txt=fp.read()
+    fp.close()
+    
+    supersede_list=[line.split()[3] for line in obsolete_txt.splitlines() \
+        if PDBid_upper==line.split()[2] and len(line.split())>3]
+
+    if supersede_list:
+        return supersede_list[0]
+    else:
+        return ''
+
+def fetch(PDBid,include_model=False):
+    '''download PDBid.pdb if standard PDB format is present
+    download superseding PDB if the provided PDBid is obsolete
+    download the PDBid-pdb-bundle.tar.gz if only best 
+    effort/minimal PDB format files exists
+
+    include_model - whether download obsolete PDB such as theoretical model
+    '''
+    PDBid=PDBid.lower()
+    PDB_file=PDBid+".pdb"
+    PDB_gz_file=PDB_file+".gz"
+    if os.path.isfile(PDB_file):
+        return PDB_file # skip already downloaded PDB file
+
+    succeed=True    # download standard PDB
+    try:
+        wget(pdb_mirror+PDBid+".ent.gz",PDB_gz_file)
+    except Exception,err:
+        succeed=False
+
+    if not succeed and include_model: # download from rcsb website
+        try:
+            wget(rcsb_pdb_mirror+PDBid.upper()+".pdb.gz",PDB_gz_file)
+            succeed=True
+        except:
+            succeed=False
+
+    if not succeed: # download best effort/minimal PDB bundle
+        tarball_name=fetch_bundle(PDBid,no_err=True)
+        if tarball_name:
+            return tarball_name
+
+    if not succeed: # download superseding PDB instead of obsolete PDB
+        PDBid_supersede=obsolete2supersede(PDBid)
+        if PDBid_supersede:
+            sys.stderr.write("%s superseded by %s\n"%(PDBid,PDBid_supersede))
+            PDB_file_supersede=fetch(PDBid_supersede,include_model)
+            if PDB_file_supersede:
+                return PDB_file_supersede
+
+    if not succeed: # cannot fetch anything: do not fetch computation model
+        sys.stderr.write(str(err)+'\n')
+        return ''
+
+    fp_gz=gzip.open(PDB_gz_file,'rb')
+    fp_pdb=open(PDB_file,'w')
+    shutil.copyfileobj(fp_gz,fp_pdb)
+    fp_pdb.close()
+    fp_gz.close()
+    os.unlink(PDB_gz_file)
+    return PDB_file
+
+def obsolete_chain2supersede_chain(PDB_chain):
+    '''get superseding PDB chain instead of obsolete PDBid chain'''
+    large_split_mapping="large_split_mapping.tsv"
+    if not os.path.isfile(large_split_mapping):
+        wget(large_split_mirror,large_split_mapping)
+
+    fp=open(large_split_mapping,'rU')
+    large_split_txt=fp.read().split("Split chain IDs\n")[1]
+    fp.close()
+
+    split_chain_ID=PDB_chain[:4].lower()+':'+PDB_chain[4:]
+
+    large_chain_ID_list=[line for line in large_split_txt.splitlines() \
+        if line.split()[1]==split_chain_ID]
+    
+    if large_chain_ID_list:
+        return large_chain_ID_list[0].split()[0].replace(':','')
+    else:
+        return ''
+
+def fetch_chain(PDB_chain,include_model=False):
+    '''download PDB and split into specific chain
+    include_model - whether download obsolete PDB such as theoretical model
+    '''
+    PDB_file=fetch(PDB_chain[:4],include_model)
+    if PDB_file:
+        PDB_chain_file_list=extract_chain(PDB_file,chainID_list=PDB_chain[4:])
+        if PDB_chain_file_list:
+            return PDB_chain_file_list
+        supersede_PDB_chain=obsolete_chain2supersede_chain(PDB_chain)
+        if supersede_PDB_chain:
+            return extract_chain(PDB_file,chainID_list=supersede_PDB_chain[4:])
+    else:
+        return ''
+
+def extract_chain(PDB_file,chainID_list=[]):
+    '''split PDB_file into PDB files containing individual chainID'''
+    if isinstance(chainID_list,str):
+        chainID_list=[chainID_list]
+    if PDB_file.endswith(".tar.gz"):
+        return extract_chain_from_bundle(PDB_file,chainID_list)
+    fp=open(PDB_file,'rU')
+    pdb_lines=fp.read().splitlines()
+    fp.close()
+    PDB_chain_file_list=[]
+    for chainID in chainID_list:
+        PDB_chain_file=PDB_file.split('.')[0]+chainID+".pdb"
+        PDB_chain_file_list.append(PDB_chain_file)
+        if os.path.isfile(PDB_chain_file):
+            continue
+        PDB_txt=''
+        atom_serial_list=[]
+        for line in pdb_lines:
+            section=line.split()[0]
+            if section in chainID_column and (not chainID_column[section] \
+                or line[chainID_column[section]]==chainID):
+                if section in ("ATOM","HETATM"):
+                    atom_serial_list.append(line[6:11])
+                elif section=="CONECT" and not line[6:11] in atom_serial_list:
+                    continue # CONECT is after all ATOM & HETATM
+                PDB_txt+=line+'\n'
+        if not atom_serial_list:
+            sys.stderr.write("ERROR! no chain %s in %s\n"%(
+                chainID,PDB_file.split('.')[0]))
+            PDB_chain_file_list=PDB_chain_file_list[:-1]
+            continue
+        fp=open(PDB_chain_file,'w')
+        fp.write(PDB_txt)
+        fp.close()
+    return PDB_chain_file_list
+
+def fetch_pdb_list_for_pfam(pfamID):
+    '''retrieve a list of all available PDB for a pfam ID'''
+    pdb_pfam_mapping_txt="pdb_pfam_mapping.txt"
+    if not os.path.isfile(pdb_pfam_mapping_txt):
+        wget(pdb_pfam_mapping_mirror,pdb_pfam_mapping_txt)
+    fp=open(pdb_pfam_mapping_txt,'rU')
+    txt=fp.read()
+    fp.close()
+    pdb_pfam_mapping_pattern=re.compile(
+        "\n(\d\w{3})\s(\w)\s(\d+)\s(\d+)\s"+pfamID)
+    return [(e[0],e[1],e[2]+'-'+e[3]) for e in \
+        pdb_pfam_mapping_pattern.findall(txt)]
+
+def fetch_pdb_list_for_uniprot(accession,all_chain=True):
+    '''retrieve a list of all available PDB chain for a uniprot accession
+    all_chain - True:  (default) all available chains
+              - False: only the first chain if multiple chains are 
+                       present in one PDB 
+    '''
+    fp=urllib2.urlopen(uniprot_mirror+accession)
+    txt=fp.read()
+    fp.close()
+    pdbe_list=sorted(set(PDBe_entry_pattern.findall(txt)))
+    if not all_chain:
+        for i,pdbe in enumerate(pdbe_list):
+            pdbe_list[i]=(pdbe[0],pdbe[1].split('/')[0],pdbe[2])
+    return pdbe_list
+
+def extract_uniprot(PDB_chain_file,accession,PERMISSIVE=True):
+    '''extract the portion of PDB for specific uniprot "accession"
+    according to DBREF. 
+
+    PERMISSIVE: what to do when the only DBREF does not match accession
+        True - If only one UNP is found, copy PDB_chain_file to 
+               PDB_accession_file
+        False - Raise error if the only DBREF UNP does not match accession
+    '''
+    accession=accession.strip()
+    PDB_accession_file=PDB_chain_file.split('.')[0]+'_'+accession+".pdb"
+    if os.path.isfile(PDB_accession_file):
+        return PDB_accession_file
+    fp=open(PDB_chain_file,'rU')
+    PDB_txt=fp.read()
+    fp.close()
+    DBREF_list=DBREF_pattern.findall(PDB_txt)
+    UNP_set=list(set([DBREF[2] for DBREF in DBREF_list]))
+    if not UNP_set:
+        shutil.copy(PDB_chain_file,PDB_accession_file)
+        return PDB_accession_file
+
+    if PERMISSIVE and len(UNP_set)==1:
+        accession=UNP_set[0]
+    
+    resSeq_range=[]
+    for DBREF in DBREF_list:
+        if accession in DBREF[2:4]:
+            resSeq_range+=range(int(DBREF[0])-1,int(DBREF[1]))
+    if not resSeq_range:
+        print >>sys.stderr,"ERROR! Cannot parse "+PDB_accession_file
+        return ''
+    resSeq_range=[str(resSeq) for resSeq in set(resSeq_range)]
+
+    PDB_lines=PDB_txt.splitlines()
+    PDB_txt=''
+    atom_serial_list=[]
+    for line in PDB_lines:
+        section=line.split()[0]
+        if section in resSeq_column and (not resSeq_column[section] \
+        or line[resSeq_column[section][0]:resSeq_column[section][1]
+           ].strip() in resSeq_range):
+            if section in ("ATOM","HETATM"):
+                atom_serial_list.append(line[6:11])
+            elif section=="CONECT" and not line[6:11] in atom_serial_list:
+                continue # CONECT is after all ATOM & HETATM
+            PDB_txt+=line+'\n'
+    fp=open(PDB_accession_file,'w')
+    fp.write(PDB_txt)
+    fp.close()
+    return PDB_accession_file
+
+def fetch_pfam(pfamID):
+    '''download all available pdb for a pfam accession'''
+    pdbe_list=fetch_pdb_list_for_pfam(pfamID)
+    PDB_chain_file_list=[]
+    for pdbe in pdbe_list:
+        PDB_chain=pdbe[0].lower()+pdbe[1]
+        PDB_chain_file_list+=fetch_chain(PDB_chain)
+    return PDB_chain_file_list
+
+def fetch_uniprot(accession,all_chain=False):
+    '''download all available pdb for a uniprot accession
+    all_chain - False: (default)only the first chain if multiple 
+                       chains are present in one PDB 
+              - True:  all available chains
+    '''
+    pdbe_list=fetch_pdb_list_for_uniprot(accession,all_chain)
+    PDB_chain_file_list=[]
+    for pdbe in pdbe_list:
+        if all_chain:
+            for chain in pdbe[1].split('/'):
+                PDB_chain=pdbe[0].lower()+chain
+                PDB_chain_file_list+=fetch_chain(PDB_chain)
+        else:
+                PDB_chain=pdbe[0].lower()+pdbe[1].split('/')[0]
+                PDB_chain_file_list+=fetch_chain(PDB_chain)
+    PDB_accession_file_list=[extract_uniprot(PDB_chain_file,accession
+        ) for PDB_chain_file in PDB_chain_file_list]
+    return PDB_accession_file_list
+
+def fetch_uniprot_sequence(accession):
+    '''retrieve fasta sequence for accession'''
+    fp=urllib2.urlopen(uniprot_mirror+accession+".fasta")
+    txt=fp.read()
+    fp.close()
+    return txt
+
+def fetch_pdb_sequence(PDBid):
+    '''retrieve SEQRES sequence for PDBid'''
+    fp=urllib2.urlopen(rcsb_fasta_mirror+PDBid)
+    txt=fp.read()
+    fp.close()
+    return txt
+
+def fetch_pdb_chain_sequence(PDB_chain):
+    '''retrieve SEQRES sequence for PDB_chain'''
+    PDBid=PDB_chain[:4].upper()
+    chainID=PDB_chain[4:]
+    fasta=fetch_pdb_sequence(PDB_chain[:4])
+    txt='\n'.join(['>'+s for s in fasta.split('>') \
+        if s.startswith(PDBid+':'+chainID)])
+    return txt
+
+if __name__=="__main__":
+    if len(sys.argv)<2:
+        sys.stderr.write(docstring)
+        exit()
+    
+    outfmt="pdb"
+    include_model=False
+    for arg in sys.argv[1:]:
+        if arg.startswith("-outfmt="):
+            outfmt=arg[len("-outfmt="):]
+        elif arg.startswith("-include_model="):
+            include_model=(arg[len("-include_model="):].lower()=="true")
+        elif arg.startswith("-"):
+            sys.stderr.write("ERROR! Unknown argument %s\n"%arg)
+            exit()
+
+    argv=[a for a in sys.argv[1:] if not a.startswith('-')]
+    if outfmt=="pdb":
+        for arg in argv:
+            if pdb_pattern.match(arg):
+                print fetch(arg,include_model)
+            elif pdb_chain_pattern.match(arg):
+                print '\n'.join(fetch_chain(arg,include_model))
+            elif accession_pattern.match(arg) or entry_pattern.match(arg):
+                print '\n'.join(fetch_uniprot(arg))
+            elif PFAM_pattern.match(arg):
+                print '\n'.join(fetch_pfam(arg))
+    elif outfmt=="list":
+        for arg in argv:
+            if accession_pattern.match(arg) or entry_pattern.match(arg):
+                print '\n'.join(['\t'.join(line) for line in \
+                    fetch_pdb_list_for_uniprot(arg,all_chain=True)])
+            elif PFAM_pattern.match(arg):
+                print '\n'.join(['\t'.join(line) for line in \
+                    fetch_pdb_list_for_pfam(arg)])
+    elif outfmt=="fasta":
+        for arg in argv:
+            if accession_pattern.match(arg) or entry_pattern.match(arg):
+                sys.stdout.write(fetch_uniprot_sequence(arg))
+            elif pdb_pattern.match(arg):
+                sys.stdout.write(fetch_pdb_sequence(arg))
+            elif pdb_chain_pattern.match(arg):
+                sys.stdout.write(fetch_pdb_chain_sequence(arg))
