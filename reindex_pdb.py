@@ -16,8 +16,10 @@ import re
 from fixMSE import code_with_modified_residues
 
 class NonHetSelect(Bio.PDB.Select): # class to select ATOM entries
-    def accept_residue(self,residue):
+    def accept_residue(self,residue): # remove heteroatoms
         return 1 if residue.id[0]==' ' else 0
+    def accept_atom(self, atom): # remove alternative location
+        return not atom.is_disordered() or atom.get_altloc() == 'A'
 
 def read_single_sequence(fasta):
     '''read the first sequence from fasta file "fasta"'''
