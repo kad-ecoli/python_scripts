@@ -12,6 +12,8 @@ if the structure contains any missing residue, residue number gaps will be remov
 '''
 import Bio.PDB
 import sys,os
+import re
+from fixMSE import code_with_modified_residues
 
 class NonHetSelect(Bio.PDB.Select): # class to select ATOM entries
     def accept_residue(self,residue):
@@ -37,10 +39,18 @@ def reindex_pdb(startindex,infile,outfile):
     model=struct[0]
     chain=[c for c in model][0]
 
-    pdb_sequence=str(Bio.PDB.PPBuilder().build_peptides(chain)[0].get_sequence())
 
     if os.path.isfile(startindex):
         ref_sequence=read_single_sequence(startindex)
+        peptide=Bio.PDB.PPBuilder().build_peptides(chain)
+        if peptide:
+            pdb_sequence=str(peptide[0].get_sequence())
+        else: # PDB only has CA
+            fp=open(infile,'rU')
+            pdb_txt=fp.read().split('\nTER')[0].split('\nEND')[0]
+            fp.close()
+            resn_list=re.findall("ATOM\s+\d+\s+CA\s+(\w{3})",pdb_txt)
+            pdb_sequence=''.join([code_with_modified_residues[r] for r in resn_list])
         startindex=ref_sequence.find(pdb_sequence)+1
     elif startindex!="clean":
         try:
