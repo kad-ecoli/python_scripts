@@ -261,6 +261,8 @@ def fetch_chain(PDB_chain,include_model=False):
         supersede_PDB_chain=obsolete_chain2supersede_chain(PDB_chain)
         if supersede_PDB_chain:
             return extract_chain(PDB_file,chainID_list=supersede_PDB_chain[4:])
+        else:
+            return ''
     else:
         return ''
 
