@@ -8,7 +8,7 @@ obo2csv.py go-basic.obo
     go.obo.MF.is_a,  go.obo.BP.is_a,  go.obo.CC.is_a
     go.obo.MF.has_a, go.obo.BP.has_a, go.obo.CC.has_a
     go.obo.obsolete
-    go.obo.alt_id
+    go.obo.GOaltids.dat
 
     Where F, P, C stands for 3 Aspect/namespace of GO:
     molecular_function, biological_process, cellular_component.
@@ -29,8 +29,8 @@ obo2csv.py go-basic.obo
     
     In addition, *.obsolete lists obsolete Terms
 
-    *.alt_id contains:
-    alt_id, id
+    GOaltids.dat contains:
+    alt_id   id
 '''
 import sys,os
 
@@ -252,7 +252,7 @@ class obo(dict):
         elif Term_id in GO_namespace_to_Aspect and \
             GO_namespace_to_Aspect[Term_id] in self:
             Aspect=GO_namespace_to_Aspect[Term_id]
-            return '\n'.join([k+ ', '+v for k,v in \
+            return '\n'.join([k+'   '+v for k,v in \
                 self[Aspect]["alt_id"].items()])+'\n'
 
         sys.stderr.write("ERROR! Cannot find GO Term '%s'"%Term_id)
@@ -402,9 +402,9 @@ def obo2csv(obo_file="go-basic.obo",prefix=''):
     fp.close()
     file_list.append(os.path.abspath(filename))
 
-    #*.alt_id contains:
-    #alt_id, id
-    filename=prefix+basename+".alt_id"
+    # *.GOaltids.dat contains:
+    #alt_id   id
+    filename=prefix+basename+".GOaltids.dat"
     fp=open(filename,'w')
     fp.write(obo_dict.alt_id())
     fp.close()
