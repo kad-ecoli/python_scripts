@@ -9,6 +9,7 @@ obo2csv.py go-basic.obo
     go.obo.MF.has_a, go.obo.BP.has_a, go.obo.CC.has_a
     go.obo.obsolete
     go.obo.GOaltids.dat
+    go.obo.uninformative
 
     Where F, P, C stands for 3 Aspect/namespace of GO:
     molecular_function, biological_process, cellular_component.
@@ -29,8 +30,10 @@ obo2csv.py go-basic.obo
     
     In addition, *.obsolete lists obsolete Terms
 
-    GOaltids.dat contains:
+    *GOaltids.dat contains:
     alt_id   id
+
+    *.uninformative lists terms that should not be used for direct annotation
 '''
 import sys,os
 
@@ -48,6 +51,9 @@ GO_Aspect_to_namespace={
     "biological_process":"biological_process",
     "cellular_component":"cellular_component",
 }
+
+# comment that shows a term is uninformative
+uninformative_txt="Note that this term is in the subset of terms that should not be used for direct"
 
 class GO_Term:
     # class to store none-obsolete GO Terms
@@ -132,14 +138,16 @@ class obo(dict):
     obo["F"]["alt_id"]      # a dict of alternative id, 
                             # key is alt_id, value is primary id
     obo["F"]["is_a"]        # GO hierachy
+    obo["F"]["uninformative"] # terms that should not be used for 
+                              # direct annotation
     '''
     def __init__(self,obo_txt=''):
-        self["F"]={"Term":dict(), "is_obsolete":[],
-                   "is_a":dict(), "alt_id":dict()}
-        self["P"]={"Term":dict(), "is_obsolete":[], 
-                   "is_a":dict(), "alt_id":dict()}
-        self["C"]={"Term":dict(), "is_obsolete":[], 
-                   "is_a":dict(), "alt_id":dict()}
+        self["F"]={"Term":dict(), "is_a":dict(), "alt_id":dict(),
+                   "is_obsolete":[], "uninformative":[]}
+        self["P"]={"Term":dict(), "is_a":dict(), "alt_id":dict(),
+                   "is_obsolete":[], "uninformative":[]}
+        self["C"]={"Term":dict(), "is_a":dict(), "alt_id":dict(),
+                   "is_obsolete":[], "uninformative":[]}
         self.append(obo_txt)
         return
 
@@ -165,6 +173,9 @@ class obo(dict):
                     del self[Aspect]["Term"][Term.id]
             else: # non-obsolete GO Term
                 self[Aspect]["Term"][Term.id]=Term
+
+            if uninformative_txt in Term_txt: # uninformative GO Term
+                self[Aspect]["uninformative"].append(Term.id)
 
             for alt_id in Term.alt_id:
                 self[Aspect]["alt_id"][alt_id]=Term.id
@@ -210,8 +221,23 @@ class obo(dict):
 
     def obsolete(self):
         '''return a string listing all obsolete Term'''
-        return'\n'.join(['\n'.join(self[Aspect]["is_obsolete"]) \
-            for Aspect in self])
+        return '\n'.join(['\n'.join(self[Aspect]["is_obsolete"]) \
+            for Aspect in self])+'\n'
+    
+    def uninformative(self,name=True):
+        '''return a string listing all uninformative Term
+        name - True:  (default) show name alongside GO id
+               False: only show GO id
+        '''
+        if name==False:
+            uninformative_str='\n'.join(['\n'.join(self[Aspect]["uninformative"]) \
+            for Aspect in self])+'\n'
+        else:
+            uninformative_str=''
+            for Aspect in self:
+                for Term_id in self[Aspect]["uninformative"]:
+                    uninformative_str+=self.short(Term_id)
+        return uninformative_str
 
     def Term(self,Term_id=""):
         '''return a GO_Term class for a specific Term
@@ -364,7 +390,8 @@ def obo2csv(obo_file="go-basic.obo",prefix=''):
     go.obo.F.is_a,  go.obo.P.is_a,  go.obo.C.is_a
     go.obo.F.has_a, go.obo.P.has_a, go.obo.C.has_a
     go.obo.obsolete
-    go.obo.alt_id
+    go.obo.GOaltids.dat
+    go.obo.uninformative
     '''
     obo_dict=parse_obo_file(obo_file)
     file_list=[]
@@ -399,6 +426,13 @@ def obo2csv(obo_file="go-basic.obo",prefix=''):
     filename=prefix+basename+".obsolete"
     fp=open(filename,'w')
     fp.write(obo_dict.obsolete())
+    fp.close()
+    file_list.append(os.path.abspath(filename))
+
+    # *.uninformative lists obsolete Terms
+    filename=prefix+basename+".uninformative"
+    fp=open(filename,'w')
+    fp.write(obo_dict.uninformative(name=True))
     fp.close()
     file_list.append(os.path.abspath(filename))
 
