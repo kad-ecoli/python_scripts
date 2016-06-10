@@ -32,7 +32,7 @@ import sys,os
 import re
 import gzip
 import tarfile
-from urllib import urlretrieve as wget
+import urllib
 import urllib2
 import shutil
 
@@ -76,6 +76,99 @@ resSeq_column={ # columns for residue sequence number, 0 for no resSeq
     "END":0,                                # Bookkeeping
 }
 
+## class the store mapping between old PDB chain and new PDB chain
+class large_split_mapping():
+    '''class to store old and new large structure mapping
+    key is old ID, value is new ID
+    '''
+    def __init__(self,large_split_mapping_file=''):
+        '''initialize class
+        if large_split_mapping_file is given, the mapping file is used.
+        otherwise, download it from internet.
+        '''
+        self.new_pdb_list=[]
+        self.new_chain_list=[]
+        self.old2new=dict()
+        self.new2old=dict()
+
+        if not large_split_mapping_file:
+            large_split_mapping_file=wget(large_split_mirror)
+        fp=open(large_split_mapping_file,'rU')
+        txt=fp.read()
+        fp.close()
+
+        for line in txt.splitlines():
+            if line.startswith("Large") or not line.strip():
+                continue
+            newID,oldID_str=line.split('\t')
+            if ':' in newID:
+                newID=newID.replace(':','')
+                oldID_str=oldID_str.replace(':','')
+                self.new_chain_list.append(newID)
+            else:
+                self.new_pdb_list.append(newID)
+                
+            self.new2old[newID]=oldID_str
+            for oldID in oldID_str.split(','):
+                self.old2new[oldID]=newID
+
+    def __repr__(self):
+        '''print mapping file'''
+        txt="Large Structure PDB ID\tSplit PDB IDs\n"
+        txt+='\n'.join([ID+'\t'+self.new2old[ID] for ID in self.new_pdb_list])
+        txt+="\n\nLarge Structure chain IDs\nSplit chain ID\n"
+        txt+='\n'.join([ID+'\t'+self.new2old[ID] for ID in self.new_chain_list])
+        txt+='\n'
+        return txt
+
+class obsolete_dat(dict):
+    '''class to store obsolete PDB mapping.
+    key is old ID, value is a list of new ID'''
+    def __init__(self,obsolete_dat_file=''):
+        '''initialize class
+        if obsolete_dat_file is given, the mapping file used
+        otherwise, download it from internet.
+        '''
+        if not obsolete_dat_file:
+            obsolete_dat_file=wget(obsolete_mirror)
+        fp=open(obsolete_dat_file,'rU')
+        txt=fp.read()
+        fp.close()
+        for line in txt.splitlines()[1:]:
+            line=line.split()
+            if len(line)<3:
+                continue
+            self[line[2]]=line[3:]
+
+    def __repr__(self):
+        '''print mapping file'''
+        txt='\n'.join([ID+'\t'+','.join(self[ID]) for ID in self])+'\n'
+        return txt
+
+def wget(url='',outfile='',no_err=False,show_url=False):
+    '''retrieve file from internet if not exists at current directory.
+    return file output filename if download successfully.
+    return empty string otherwise.
+
+    outfile - output file name. By default it is the basename
+    no_err - whether supress downloading error
+    show_url - whether print url at stdout
+    '''
+    if not outfile:
+        outfile=os.path.basename(url)
+    if not os.path.isfile(outfile):
+        if show_url:
+            sys.stderr.write("fetching %s\n"%url)
+        try:
+            urllib.urlretrieve(url, outfile)
+        except Exception,err:
+            if not err:
+                sys.stderr.write(str(err)+'\n')
+            return ''
+    elif show_url:
+        sys.stderr.write("%s already exists\n"%outfile)
+    return outfile
+
 def fetch_bundle(PDBid,no_err=False):
     '''fetch Best effort/minimal PDB format files for large structures
     return the tarball file name. 
@@ -88,15 +181,8 @@ def fetch_bundle(PDBid,no_err=False):
     # and software tools that rely solely on the PDB file format. 
     PDBid=PDBid.lower()
     tarball_name=PDBid+"-pdb-bundle.tar.gz"
-    if not os.path.isfile(tarball_name):
-        try:
-            wget(pdb_bundle_mirror+PDBid[1:3]+'/'+PDBid+'/'+tarball_name
-                ,tarball_name)
-        except Exception,err:
-            if not no_err:
-                sys.stderr.write(str(err)+'\n')
-            return ''
-    return tarball_name
+    return wget(pdb_bundle_mirror+PDBid[1:3]+'/'+PDBid+'/'+tarball_name
+        ,tarball_name,no_err)
 
 def extract_chain_from_bundle(tarball_name,chainID_list=[]):
     '''split best effort/minimal PDB tarball into PDB files containing 
@@ -160,22 +246,13 @@ def extract_chain_from_bundle(tarball_name,chainID_list=[]):
 
 def obsolete2supersede(PDBid):
     '''get superseding PDB id instead of obsolete PDBid'''
-    obsolete_dat="obsolete.dat"
-    if not os.path.isfile(obsolete_dat):
-        wget(obsolete_mirror,obsolete_dat)
-
-    PDBid_upper=PDBid.upper()
-    fp=open(obsolete_dat,'rU')
-    obsolete_txt=fp.read()
-    fp.close()
-    
-    supersede_list=[line.split()[3] for line in obsolete_txt.splitlines() \
-        if PDBid_upper==line.split()[2] and len(line.split())>3]
-
-    if supersede_list:
-        return supersede_list[0]
-    else:
-        return ''
+    if not "obsolete_dict" in globals():
+        global obsolete_dict
+        obsolete_dict=obsolete_dat()
+    PDBid=PDBid.upper()
+    if PDBid in obsolete_dict and obsolete_dict[PDBid]:
+        return obsolete_dict[PDBid][0]
+    return ''
 
 def fetch(PDBid,include_model=False):
     '''download PDBid.pdb if standard PDB format is present
@@ -191,25 +268,17 @@ def fetch(PDBid,include_model=False):
     if os.path.isfile(PDB_file):
         return PDB_file # skip already downloaded PDB file
 
-    succeed=True    # download standard PDB
-    try:
-        wget(pdb_mirror+PDBid+".ent.gz",PDB_gz_file)
-    except Exception,err:
-        succeed=False
+    PDB_gz_file=wget(pdb_mirror+PDBid+".ent.gz")
 
-    if not succeed and include_model: # download from rcsb website
-        try:
-            wget(rcsb_pdb_mirror+PDBid.upper()+".pdb.gz",PDB_gz_file)
-            succeed=True
-        except:
-            succeed=False
+    if not PDB_gz_file and include_model: # download from rcsb website
+        PDB_gz_file=wget(rcsb_pdb_mirror+PDBid.upper()+".pdb.gz",PDB_gz_file)
 
-    if not succeed: # download best effort/minimal PDB bundle
+    if not PDB_gz_file: # download best effort/minimal PDB bundle
         tarball_name=fetch_bundle(PDBid,no_err=True)
         if tarball_name:
             return tarball_name
 
-    if not succeed: # download superseding PDB instead of obsolete PDB
+    if not PDB_gz_file: # download superseding PDB instead of obsolete PDB
         PDBid_supersede=obsolete2supersede(PDBid)
         if PDBid_supersede:
             sys.stderr.write("%s superseded by %s\n"%(PDBid,PDBid_supersede))
@@ -217,8 +286,7 @@ def fetch(PDBid,include_model=False):
             if PDB_file_supersede:
                 return PDB_file_supersede
 
-    if not succeed: # cannot fetch anything: do not fetch computation model
-        sys.stderr.write(str(err)+'\n')
+    if not PDB_gz_file: # cannot fetch anything: do not fetch computation model
         return ''
 
     fp_gz=gzip.open(PDB_gz_file,'rb')
@@ -231,40 +299,29 @@ def fetch(PDBid,include_model=False):
 
 def obsolete_chain2supersede_chain(PDB_chain):
     '''get superseding PDB chain instead of obsolete PDBid chain'''
-    large_split_mapping="large_split_mapping.tsv"
-    if not os.path.isfile(large_split_mapping):
-        wget(large_split_mirror,large_split_mapping)
-
-    fp=open(large_split_mapping,'rU')
-    large_split_txt=fp.read().split("Split chain IDs\n")[1]
-    fp.close()
-
-    split_chain_ID=PDB_chain[:4].lower()+':'+PDB_chain[4:]
-
-    large_chain_ID_list=[line for line in large_split_txt.splitlines() \
-        if line.split()[1]==split_chain_ID]
+    if not "large_split_dict" in globals(): # check if it is initialized
+        global large_split_dict
+        large_split_dict=large_split_mapping()
+    if PDB_chain in large_split_dict.old2new:
+        return large_split_dict.old2new[PDB_chain]
     
-    if large_chain_ID_list:
-        return large_chain_ID_list[0].split()[0].replace(':','')
-    else:
+    PDBid_supersede=obsolete2supersede(PDB_chain[:4])
+    if not PDBid_supersede:
         return ''
+    return PDBid_supersede+PDB_chain[4:]
 
 def fetch_chain(PDB_chain,include_model=False):
     '''download PDB and split into specific chain
     include_model - whether download obsolete PDB such as theoretical model
     '''
     PDB_file=fetch(PDB_chain[:4],include_model)
-    if PDB_file:
-        PDB_chain_file_list=extract_chain(PDB_file,chainID_list=PDB_chain[4:])
-        if PDB_chain_file_list:
-            return PDB_chain_file_list
-        supersede_PDB_chain=obsolete_chain2supersede_chain(PDB_chain)
-        if supersede_PDB_chain:
-            return extract_chain(PDB_file,chainID_list=supersede_PDB_chain[4:])
-        else:
-            return ''
-    else:
+    if not PDB_file:
         return ''
+    if not PDB_file[:4]==PDB_chain[:4]: # PDB_chain was obsolete
+        PDB_chain=obsolete_chain2supersede_chain(PDB_chain)
+
+    PDB_chain_file_list=extract_chain(PDB_file,chainID_list=PDB_chain[4:])
+    return PDB_chain_file_list
 
 def extract_chain(PDB_file,chainID_list=[]):
     '''split PDB_file into PDB files containing individual chainID'''
