@@ -39,6 +39,12 @@ option:
      (default) all proteins in the association files
      If a PDB chain is in the list but not in the gene association file, its
      latest chain will be mapped from "large_split_mapping.tsv" from PDB
+
+-pdb2uniprot=pdb2uniprot.map (valid if -ID is set and the input is PDB chain)
+    map GO association from uniprot instead of from PDB for all specified
+    PDB chain using pdb-uniprot mapping file "pdb2uniprot.map".
+    pdb2uniprot.map is a two column tabular file. First column is PDB chain
+    and second column is comma seperated list of uniprot ID
 '''
 import sys,os
 import urllib
@@ -65,6 +71,9 @@ def parse_GOA(GOA='',
     DB        - comma seperated strings of database of entry to use
                 default is use all database
     ID_map_dict - dict for mapping old PDB ID to new PDB ID
+                key is DB_Object_ID in the gene association file
+                value is comma separated list of entry name is the output
+                UNIPROT GO mapping file
                 default take all entries without mapping
     obo_dict - obo2csv.obo class for parsing SIFTS PDB-GO mapping
     '''
@@ -120,34 +129,37 @@ def parse_GOA(GOA='',
         if DB and not source_database in DB: 
             GO_count-=1
             continue # only map entries from selected database
+        
+        if GOterm in excludeGO or evidence=="ND":
+            excludeGO_count+=1
+            continue # only map GO terms not excluded
 
         if ID_map_dict:
             if not accession in ID_map_dict:
                 GO_count-=1
                 continue # only map entries specified in ID_map_dict
             else:
-                accession=ID_map_dict[accession]
-
-        if GOterm in excludeGO or evidence=="ND":
-            excludeGO_count+=1
-            continue # only map GO terms not excluded
-        
-        if not accession in ALL_dict[Aspect]:
-            ALL_dict[Aspect][accession]=[GOterm]
+                accession_list=ID_map_dict[accession].split(',')
         else:
-            ALL_dict[Aspect][accession].append(GOterm)
+            accession_list=[accession]
+
+        for accession in accession_list:
+            if not accession in ALL_dict[Aspect]:
+                ALL_dict[Aspect][accession]=[GOterm]
+            else:
+                ALL_dict[Aspect][accession].append(GOterm)
         
-        if evidence!="IEA":
-            if not accession in NONIEA_dict[Aspect]:
-                NONIEA_dict[Aspect][accession]=[GOterm]
-            else:
-                NONIEA_dict[Aspect][accession].append(GOterm)
+            if evidence!="IEA":
+                if not accession in NONIEA_dict[Aspect]:
+                    NONIEA_dict[Aspect][accession]=[GOterm]
+                else:
+                    NONIEA_dict[Aspect][accession].append(GOterm)
             
-        if evidence in CAFA_set:
-            if not accession in CAFA_dict[Aspect]:
-                CAFA_dict[Aspect][accession]=[GOterm]
-            else:
-                CAFA_dict[Aspect][accession].append(GOterm)
+            if evidence in CAFA_set:
+                if not accession in CAFA_dict[Aspect]:
+                    CAFA_dict[Aspect][accession]=[GOterm]
+                else:
+                    CAFA_dict[Aspect][accession].append(GOterm)
 
     ## sort GO terms for each accession
     for Aspect in ALL_dict:
@@ -250,9 +262,12 @@ def write_UNIPROT_GOterms_txt(GOterms_txt,GOterms_txt_Aspect, filename):
         fp.close()
     return
 
-def map_pdb_ID_list(ID_list=[]):
+def map_pdb_ID_list(ID_list=[],pdb2uniprot_list=[]):
     '''map list of obsolete PDB chain to supersede PDB chain
     return a dict whose key is old ID and value is new ID
+
+    pdb2uniprot_list - a list containing mapping from PDB chain to 
+        uniprot accession
     '''
     ID_map_dict=dict()
     large_split_dict=large_split_mapping()
@@ -262,13 +277,31 @@ def map_pdb_ID_list(ID_list=[]):
         else:
             new_chain=old_chain
         ID_map_dict[new_chain]=old_chain
-    return ID_map_dict
+
+    if not pdb2uniprot_list:
+        return ID_map_dict
+        
+    pdb2uniprot_map_dict=dict()
+    old_chain_list=ID_map_dict.values()
+    for line in pdb2uniprot_list:
+        pdb_chain,uniprot_str=line.split()
+        if pdb_chain in ID_map_dict:
+            pdb_chain=ID_map_dict[pdb_chain]
+        elif not pdb_chain in old_chain_list:
+            continue # pdb_chain is not in ID_list
+        for uniprot in uniprot_str.split(','):
+            if uniprot in pdb2uniprot_map_dict:
+                pdb2uniprot_map_dict[uniprot]+=','+pdb_chain
+            else:
+                pdb2uniprot_map_dict[uniprot]=pdb_chain
+    return pdb2uniprot_map_dict
 
 if __name__=="__main__":
     # Default parameters for options
     excludeGO="GO:0005515,GO:0005488,GO:0003674,GO:0008150,GO:0005575" # GO to be excluded
     DB=''
     ID=''
+    pdb2uniprot=''
 
     # parse arguments
     argv=[] # input FASTA format alignment files
@@ -282,20 +315,30 @@ if __name__=="__main__":
             DB=arg[len("-DB="):]
         elif arg.startswith('-ID='):
             ID=arg[len("-ID="):]
+        elif arg.startswith('-pdb2uniprot='):
+            pdb2uniprot=arg[len("-pdb2uniprot="):]
         else:
             sys.stderr.write("ERROR! Unknown argument "+arg+'\n')
             exit()
 
+    if pdb2uniprot and not ID:
+        sys.stderr.write("ERROR! -pdb2uniprot must be used with -ID\n")
+        exit()
     if not len(argv):
         sys.stderr.write(docstring)
         exit()
+    
+    pdb2uniprot_list=[]
+    fp=open(pdb2uniprot,'rU')
+    pdb2uniprot_list=[line for line in fp.read().splitlines() if line.strip()]
+    fp.close()
 
     ID_list=[] # list of proteins for which GO terms are mapped
     if ID:
         fp=open(ID,'rU')
         ID_list=[line for line in fp.read().splitlines() if line.strip()]
         fp.close()
-    ID_map_dict=map_pdb_ID_list(ID_list)
+    ID_map_dict=map_pdb_ID_list(ID_list,pdb2uniprot_list)
 
     ## parse GO hierachy
     fp=open(wget(obo_url,show_url=True),'rU')
