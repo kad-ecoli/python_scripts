@@ -50,8 +50,8 @@ def sup_pymol(model_pdb,native_pdb, algo="pymol-super",
     fp=open(tmp_dir+"model.pdb",'rU')
     txt=fp.read()
     fp.close()
-    if check_nmr and "MODEL" in txt:
-        MODEL_start_lst=[e.start()+1 for e in re.finditer('\nMODEL',txt)]
+    if check_nmr and "\nMODEL " in txt:
+        MODEL_start_lst=[e.start()+1 for e in re.finditer('\nMODEL ',txt)]
         if txt.startswith("MODEL"):
             MODEL_start_lst=[0]+MODEL_start_lst
 
@@ -241,7 +241,7 @@ def sup_TMalign(model_pdb,native_pdb, algo="TMalign",
     txt=fp.read()
     fp.close()
     if check_nmr and "\nMODEL " in txt:
-        MODEL_start_lst=[e.start()+1 for e in re.finditer('\nMODEL',txt)]
+        MODEL_start_lst=[e.start()+1 for e in re.finditer('\nMODEL ',txt)]
         if txt.startswith("MODEL"):
             MODEL_start_lst=[0]+MODEL_start_lst
         pdb_txt='' #txt[:MODEL_start_lst[0]]
