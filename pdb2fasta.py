@@ -3,6 +3,7 @@
 import sys,os
 import textwrap
 from fixMSE import code_with_modified_residues
+import gzip
 docstring='''
 pdb2fasta.py pdb.pdb > seq.fasta
     convert PDB file pdb.pdb to sequence FASTA file seq.fasta
@@ -35,7 +36,12 @@ def pdb2seq(infile="pdb.pdb", PERMISSIVE="MSE", outfmt="PDB"):
         HETATM: Allow all ATOM & HETATM residues, even if they are ligands
         MSE:   (default) Disallow any non-standard amino acid apart from MSE
     '''
-    txt=open(infile,'rU').read()
+    if infile.endswith(".gz"):
+        fp=gzip.open(infile,'rU')
+    else:
+        fp=open(infile,'rU')
+    txt=fp.read()
+    fp.close()
     txt=txt.split("\nENDMDL")[0] # Only the first model
 
     aa3to1=code_with_modified_residues
@@ -93,7 +99,7 @@ def pdb2fasta(infile="pdb.pdb", PERMISSIVE="MSE", outfmt="PDB"):
     header_list,sequence_list=pdb2seq(infile,PERMISSIVE,outfmt)
     fasta_list=['>'+header_list[i]+'\n'+ \
                   sequence_list[i] for i in range(len(sequence_list))]
-    return '\n'.join(fasta_list)
+    return '\n'.join(fasta_list)+'\n'
 
 if __name__=="__main__":
     PERMISSIVE="MSE"
@@ -114,4 +120,4 @@ if __name__=="__main__":
         sys.stderr.write(docstring)
     
     for pdb in argv:
-        print pdb2fasta(pdb, PERMISSIVE=PERMISSIVE, outfmt=outfmt)
+        sys.stdout.write(pdb2fasta(pdb, PERMISSIVE=PERMISSIVE, outfmt=outfmt))
