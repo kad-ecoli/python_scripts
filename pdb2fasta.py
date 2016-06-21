@@ -1,9 +1,5 @@
 #!/usr/bin/env python
 # 2016-04-27 Chengxin Zhang
-import sys,os
-import textwrap
-from fixMSE import code_with_modified_residues
-import gzip
 docstring='''
 pdb2fasta.py pdb.pdb > seq.fasta
     convert PDB file pdb.pdb to sequence FASTA file seq.fasta
@@ -19,6 +15,13 @@ options:
     COFACTOR - convert PDB to single sequence FASTA. If there are 
                multiple chains in pdb, they will be treated as one chain.
 '''
+import sys,os
+import shutil
+import textwrap
+from fixMSE import code_with_modified_residues
+import gzip,tarfile
+import random
+
 code_standard = {
     'ALA':'A', 'VAL':'V', 'PHE':'F', 'PRO':'P', 'MET':'M',
     'ILE':'I', 'LEU':'L', 'ASP':'D', 'GLU':'E', 'LYS':'K',
@@ -26,6 +29,53 @@ code_standard = {
     'CYS':'C', 'ASN':'N', 'GLN':'Q', 'TRP':'W', 'GLY':'G',
     #'MSE':'M',
     }
+
+def pdbbundle2seq(tarball_name="pdb-bundle.tar.gz",PERMISSIVE="MSE",outfmt="PDB"):
+    '''convert best effort/minimum PDB bundle to sequence
+    '''
+    chain_id_mapping=dict()
+    tarball_prefix=os.path.basename(tarball_name).split('.')[0]
+    tar=tarfile.open(tarball_name,'r:gz')
+    names=tar.getnames()
+    PDBid=names[-1].split('-')[0]
+
+    # parse chain id mapping
+    fp=tar.extractfile(PDBid+"-chain-id-mapping.txt")
+    map_txt=fp.read()
+    fp.close()
+    names=[] # list of PDB files in tarball
+    for section in map_txt.split('\n'+PDBid+"-pdb-bundle"):
+        if not ':' in section:
+            continue
+        idx,section=section.split(".pdb:\n")
+        pdb_bundle_name=PDBid+"-pdb-bundle"+idx+".pdb"
+        names.append(pdb_bundle_name)
+        for line in section.splitlines():
+            New_chain_ID,Original_chain_ID=line.split()
+            key=pdb_bundle_name.split('.')[0]+':'+New_chain_ID
+            value=tarball_prefix+':'+Original_chain_ID
+            chain_id_mapping[key]=value
+
+    header_list=[]
+    sequence_list=[]
+    for pdb_bundle_name in names:
+        # parse text in *-pdb-bundle*.pdb
+        fp=tar.extractfile(pdb_bundle_name)
+        txt=fp.read()
+        fp.close()
+        header_list_tmp,sequence_list_tmp=pdbtxt2seq(
+            txt,pdb_bundle_name,PERMISSIVE,outfmt)
+        if outfmt=="PDB":
+            header_list+=[chain_id_mapping[h] for h \
+                in header_list_tmp]
+        sequence_list+=sequence_list_tmp
+    if outfmt=="COFACTOR":
+        sequence=''.join([''.join(s.splitlines()) for s in sequence_list])
+        sequence=textwrap.fill(''.join(sequence),60)
+        header=tarball_prefix+'\t'+str(len(sequence))
+        header_list=[header]
+        sequence_list=[sequence]
+    return header_list,sequence_list
 
 def pdb2seq(infile="pdb.pdb", PERMISSIVE="MSE", outfmt="PDB"):
     '''Convert PDB to sequence.
@@ -36,12 +86,25 @@ def pdb2seq(infile="pdb.pdb", PERMISSIVE="MSE", outfmt="PDB"):
         HETATM: Allow all ATOM & HETATM residues, even if they are ligands
         MSE:   (default) Disallow any non-standard amino acid apart from MSE
     '''
-    if infile.endswith(".gz"):
+    if infile.endswith(".tar.gz"): # best effort/minimum PDB bundle
+        return pdbbundle2seq(infile,PERMISSIVE,outfmt)
+    elif infile.endswith(".gz"):
         fp=gzip.open(infile,'rU')
     else:
         fp=open(infile,'rU')
     txt=fp.read()
     fp.close()
+    return pdbtxt2seq(txt,infile,PERMISSIVE,outfmt)
+
+def pdbtxt2seq(txt='',infile='pdb.pdb',PERMISSIVE="MSE",outfmt="PDB"):
+    '''Convert PDB text "txt" to sequence read from PDB file "infile"
+    Return two lists, one for headers and the other for sequence.
+
+    PERMISSIVE - whether allow non-standard residues
+        ATOM:   Only allow ATOM residues
+        HETATM: Allow all ATOM & HETATM residues, even if they are ligands
+        MSE:   (default) Disallow any non-standard amino acid apart from MSE
+    '''
     txt=txt.split("\nENDMDL")[0] # Only the first model
 
     aa3to1=code_with_modified_residues
@@ -93,6 +156,7 @@ def pdb2seq(infile="pdb.pdb", PERMISSIVE="MSE", outfmt="PDB"):
         header_list=[header]
         sequence_list=[sequence]
     return header_list,sequence_list
+
 
 def pdb2fasta(infile="pdb.pdb", PERMISSIVE="MSE", outfmt="PDB"):
     '''Convert PDB to FASTA'''
