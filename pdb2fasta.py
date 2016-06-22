@@ -10,6 +10,11 @@ options:
     ATOM  - only allow ATOM residues
     HETATM- All all ATOM & HETATM residues with CA atom, including ligands
 
+-allowX={true,true} whether to allow amino acid "X"
+    true     - (default) allow any amino acid type, including X
+    false    - only allow amino acid that can mapped to 20 standard amino
+               acids ACDEFGHIKLMNPQRSTVWY
+
 -outfmt={PDB,COFACTOR} how to treat multichain PDB
     PDB      - convert multiple chains PDB to multiple sequence FASTA
     COFACTOR - convert PDB to single sequence FASTA. If there are 
@@ -30,7 +35,8 @@ code_standard = {
     #'MSE':'M',
     }
 
-def pdbbundle2seq(tarball_name="pdb-bundle.tar.gz",PERMISSIVE="MSE",outfmt="PDB"):
+def pdbbundle2seq(tarball_name="pdb-bundle.tar.gz",PERMISSIVE="MSE",
+    outfmt="PDB",allowX=True):
     '''convert best effort/minimum PDB bundle to sequence
     '''
     chain_id_mapping=dict()
@@ -64,7 +70,7 @@ def pdbbundle2seq(tarball_name="pdb-bundle.tar.gz",PERMISSIVE="MSE",outfmt="PDB"
         txt=fp.read()
         fp.close()
         header_list_tmp,sequence_list_tmp=pdbtxt2seq(
-            txt,pdb_bundle_name,PERMISSIVE,outfmt)
+            txt,pdb_bundle_name,PERMISSIVE,outfmt,allowX)
         if outfmt=="PDB":
             header_list+=[chain_id_mapping[h] for h \
                 in header_list_tmp]
@@ -77,7 +83,7 @@ def pdbbundle2seq(tarball_name="pdb-bundle.tar.gz",PERMISSIVE="MSE",outfmt="PDB"
         sequence_list=[sequence]
     return header_list,sequence_list
 
-def pdb2seq(infile="pdb.pdb", PERMISSIVE="MSE", outfmt="PDB"):
+def pdb2seq(infile="pdb.pdb", PERMISSIVE="MSE", outfmt="PDB",allowX=True):
     '''Convert PDB to sequence.
     Return two lists, one for headers and the other for sequence.
 
@@ -87,16 +93,17 @@ def pdb2seq(infile="pdb.pdb", PERMISSIVE="MSE", outfmt="PDB"):
         MSE:   (default) Disallow any non-standard amino acid apart from MSE
     '''
     if infile.endswith(".tar.gz"): # best effort/minimum PDB bundle
-        return pdbbundle2seq(infile,PERMISSIVE,outfmt)
+        return pdbbundle2seq(infile,PERMISSIVE,outfmt,allowX)
     elif infile.endswith(".gz"):
         fp=gzip.open(infile,'rU')
     else:
         fp=open(infile,'rU')
     txt=fp.read()
     fp.close()
-    return pdbtxt2seq(txt,infile,PERMISSIVE,outfmt)
+    return pdbtxt2seq(txt,infile,PERMISSIVE,outfmt,allowX)
 
-def pdbtxt2seq(txt='',infile='pdb.pdb',PERMISSIVE="MSE",outfmt="PDB"):
+def pdbtxt2seq(txt='',infile='pdb.pdb',PERMISSIVE="MSE",outfmt="PDB",
+    allowX=True):
     '''Convert PDB text "txt" to sequence read from PDB file "infile"
     Return two lists, one for headers and the other for sequence.
 
@@ -130,6 +137,8 @@ def pdbtxt2seq(txt='',infile='pdb.pdb',PERMISSIVE="MSE",outfmt="PDB"):
         chain_id=line[21].replace(' ','_')
         res_num=int(line[22:26]) # residue sequence number
         aa=aa3to1[residue] if residue in aa3to1 else 'X' # one letter AA name
+        if not allowX and aa=='X':
+            continue
         residue_tuple=(res_num,aa)
 
         if not chain_id in chain_dict:
@@ -158,9 +167,9 @@ def pdbtxt2seq(txt='',infile='pdb.pdb',PERMISSIVE="MSE",outfmt="PDB"):
     return header_list,sequence_list
 
 
-def pdb2fasta(infile="pdb.pdb", PERMISSIVE="MSE", outfmt="PDB"):
+def pdb2fasta(infile="pdb.pdb", PERMISSIVE="MSE", outfmt="PDB",allowX=True):
     '''Convert PDB to FASTA'''
-    header_list,sequence_list=pdb2seq(infile,PERMISSIVE,outfmt)
+    header_list,sequence_list=pdb2seq(infile,PERMISSIVE,outfmt,allowX)
     fasta_list=['>'+header_list[i]+'\n'+ \
                   sequence_list[i] for i in range(len(sequence_list))]
     return '\n'.join(fasta_list)+'\n'
@@ -168,12 +177,15 @@ def pdb2fasta(infile="pdb.pdb", PERMISSIVE="MSE", outfmt="PDB"):
 if __name__=="__main__":
     PERMISSIVE="MSE"
     outfmt="PDB"
+    allowX=True
     argv=[]
     for arg in sys.argv[1:]:
         if arg.startswith("-outfmt="):
             outfmt=arg[len("-outfmt="):].upper()
         elif arg.startswith("-PERMISSIVE="):
             PERMISSIVE=arg[len("-PERMISSIVE="):].upper()
+        elif arg.startswith("-allowX="):
+            allowX=(arg[len("-allowX="):].lower()=="true")
         elif arg.startswith("-"):
             sys.stderr.write("ERROR! Unknown argument %s\n"%arg)
             exit()
@@ -184,4 +196,5 @@ if __name__=="__main__":
         sys.stderr.write(docstring)
     
     for pdb in argv:
-        sys.stdout.write(pdb2fasta(pdb, PERMISSIVE=PERMISSIVE, outfmt=outfmt))
+        sys.stdout.write(pdb2fasta(
+            pdb, PERMISSIVE=PERMISSIVE, outfmt=outfmt, allowX=allowX))
