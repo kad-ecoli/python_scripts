@@ -270,6 +270,8 @@ def map_pdb_ID_list(ID_list=[],pdb2uniprot_list=[]):
         uniprot accession
     '''
     ID_map_dict=dict()
+    if not ID_list:
+        return ID_map_dict
     large_split_dict=large_split_mapping()
     for old_chain in ID_list:
         if old_chain in large_split_dict.old2new:
@@ -329,9 +331,10 @@ if __name__=="__main__":
         exit()
     
     pdb2uniprot_list=[]
-    fp=open(pdb2uniprot,'rU')
-    pdb2uniprot_list=[line for line in fp.read().splitlines() if line.strip()]
-    fp.close()
+    if pdb2uniprot:
+        fp=open(pdb2uniprot,'rU')
+        pdb2uniprot_list=[line for line in fp.read().splitlines() if line.strip()]
+        fp.close()
 
     ID_list=[] # list of proteins for which GO terms are mapped
     if ID:
