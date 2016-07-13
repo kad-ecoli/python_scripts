@@ -122,6 +122,8 @@ def pdbtxt2seq(txt='',infile='pdb.pdb',PERMISSIVE="MSE",outfmt="PDB",
 
         if line[13:15]!="CA": # Carbon Alpha Only
             continue
+        if not line[16] in {' ','A'}: # remove alternative location
+            continue
 
         residue=line[17:20] # residue name
 
