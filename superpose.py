@@ -65,7 +65,6 @@ def sup_pymol(model_pdb,native_pdb, algo="pymol-super",
                 
             if "\nATOM  " in MODEL:
                 single_model_file=tmp_dir+str(idx)
-                #print "single_model_file=",single_model_file
                 fp=open(single_model_file,'w')
                 fp.write(MODEL)
                 fp.close()
@@ -105,7 +104,7 @@ save %s,%u
 
         RMSD_pattern=re.compile("RMSD{0,1}\s*={0,1}\s*([.\d]+)")
         RMSD_lst=RMSD_pattern.findall(stdout)
-        print '\n'.join(["RMSD="+e+";" for e in RMSD_lst])
+        sys.stdout.write(''.join(["RMSD="+e+";"+'\n' for e in RMSD_lst]))
         
         pdb_txt=''
 
@@ -176,10 +175,9 @@ quit
     command=execpath+" -c "+pymol_pml
     stdout,stderr= subprocess.Popen(command, shell=True,
         stdout = subprocess.PIPE).communicate()
-    #print stdout
     RMSD_pattern=re.compile("RMSD{0,1}\s*={0,1}\s*([.\d]+)")
     RMSD=RMSD_pattern.findall(stdout)[-1]
-    print "RMSD="+RMSD+";",
+    sys.stdout.write("RMSD="+RMSD+";")
 
     #fp=open(tmp_dir+"model_fit.pdb",'rU')
     #pdb_txt=fp.read()
@@ -267,7 +265,7 @@ def sup_TMalign(model_pdb,native_pdb, algo="TMalign",
                 RMSD_lst.append(RMSD)
                 TMscore_lst.append(TMscore)
 
-                print ''
+                sys.stdout.write('\n')
                 #if os.path.isfile(single_model_file):
                     #os.remove(single_model_file)
         if os.path.isdir(tmp_dir):
@@ -282,13 +280,12 @@ def sup_TMalign(model_pdb,native_pdb, algo="TMalign",
              +" && cat "+tmp_dir+"matrix.txt"
     stdout,stderr= subprocess.Popen(command, shell=True, 
         stdout = subprocess.PIPE).communicate()
-    #print stdout
     RMSD_pattern=re.compile("RMSD\s*=\s*([.\d]+)")
     RMSD=RMSD_pattern.findall(stdout)[-1]
     TMscore_pattern=re.compile("TM-score\s*=\s*([.\d]+)")
     TMscore=TMscore_pattern.findall(stdout)[-1]
 
-    print "RMSD="+RMSD+"; TMscore="+TMscore+";",
+    sys.stdout.write("RMSD="+RMSD+"; TMscore="+TMscore+";")
 
     pattern=re.compile("\s[123]"+"\s+[-]{0,1}[.\d]+"*4+"\s*\n")
     m=0
@@ -395,7 +392,7 @@ if __name__=="__main__":
         elif arg.startswith('-execpath='):
             execpath=arg[len("-execpath="):]
         else:
-            print >>sys.stderr, "ERROR! Unknown argument "+arg
+            sys.stderr.write("ERROR! Unknown argument "+arg+'\n')
 
     if len(argv)<2:
         sys.stderr.write(docstring)
@@ -403,4 +400,4 @@ if __name__=="__main__":
 
     native_pdb=argv[-1]
     for model_pdb in argv[:-1]:
-        print superpose(model_pdb,native_pdb,algo,execpath)
+        sys.stdout.write(superpose(model_pdb,native_pdb,algo,execpath)+'\n')
