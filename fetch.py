@@ -415,7 +415,7 @@ def extract_uniprot(PDB_chain_file,accession,PERMISSIVE=True):
     resSeq_range=[]
     for DBREF in DBREF_list:
         if accession in DBREF[2:4]:
-            resSeq_range+=range(int(DBREF[0])-1,int(DBREF[1]))
+            resSeq_range+=range(int(DBREF[0]),int(DBREF[1])+1)
     if not resSeq_range:
         print >>sys.stderr,"ERROR! Cannot parse "+PDB_accession_file
         return ''
