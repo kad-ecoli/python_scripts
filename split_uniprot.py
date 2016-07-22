@@ -29,8 +29,8 @@ import shutil
 
 accession_pattern=re.compile(# uniprot accession (AC)
     "^[OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9]([A-Z][A-Z0-9]{2}[0-9]){1,2}$")
-DBREF_pattern=re.compile("DBREF\s\s\d\w{3}\s(\w{0,1})\s+(\d+)\s+(\d+)\s+"+ \
-    "UNP\s+(\w+)\s+(\w+_\w+)\s+(\d+)\s+(\d+)\s*")
+#DBREF_pattern=re.compile("DBREF\s\s\d\w{3}\s(\w{0,1})\s+(\d+)\s+(\d+)\s+UNP\s+(\w+)\s+(\w+_\w+)\s+(\d+)\s+(\d+)\s*")
+DBREF_pattern=re.compile("DBREF[\d]{0,1}\s{1,2}\d\w{3}\s(\w{0,1})\s+(\d+)\s+(\d+)\s+UNP\s+(\w+)")
 
 chainID_column={ # column to store chainID, 0 for no chainID
     "DBREF":12, "SEQADV":16, "SEQRES":11, "MODRES":16,# Primary Structure
