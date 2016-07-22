@@ -1,2 +1,5 @@
-# do not track compiled python code
+# compiled python code
 *.pyc
+
+# vim temporary backup
+.*.swp
