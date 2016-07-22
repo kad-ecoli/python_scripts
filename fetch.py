@@ -52,8 +52,8 @@ accession_pattern=re.compile(# uniprot accession (AC)
     "^[OPQ][0-9][A-Z0-9]{3}[0-9]|[A-NR-Z][0-9]([A-Z][A-Z0-9]{2}[0-9]){1,2}$")
 entry_pattern=re.compile("^\w{1,5}_\w{1,5}") # uniprot entry name
 PDBe_entry_pattern=re.compile("www\.ebi\.ac\.uk\/pdbe\-srv\/view/entry/(\d\w{3})[\w\W]+?<td>([/\w]+)<\/td><td><a\s+href=\"\.+.\/blast\/\?about=\w+\[(\d+\-\d+)\]")
-DBREF_pattern=re.compile("DBREF\s\s\d\w{3}\s\w{0,1}\s+(\d+)\s+(\d+)\s+"+ \
-    "UNP\s+(\w+)\s+(\w+_\w+)\s+(\d+)\s+(\d+)\s*")
+#DBREF_pattern=re.compile("DBREF\s\s\d\w{3}\s\w{0,1}\s+(\d+)\s+(\d+)\s+UNP\s+(\w+)\s+(\w+_\w+)\s+(\d+)\s+(\d+)\s*")
+DBREF_pattern=re.compile("DBREF[\d]{0,1}\s{1,2}\d\w{3}\s\w{0,1}\s+(\d+)\s+(\d+)\s+UNP\s+(\w+)")
 PFAM_pattern=re.compile("[Pp][Ff]\d{5}")
 pdb_bundle_pattern=re.compile("\d\w{3}\-pdb\-bundle\d+\.pdb")
 
