@@ -24,6 +24,8 @@ superpose.py       # superpose two structures
 initdat2pdb.py     # convert LOMETS threading result init.dat to PDB
 HomologyModelling.py # homology modelling by MODELLER
 strip_sidechain.py # remove side
+DomainParser.py    # partition a PDB chain into domains
+split_uniprot.py   # partition a PDB file into different uniprot ID
 
 #### GO parsing ####
 obo2csv.py         # parsing obo format GO defination file
