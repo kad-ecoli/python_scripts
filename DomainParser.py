@@ -104,6 +104,10 @@ def DomainParser(pdb_file,execpath="domainparser2.LINUX",
             sys.stderr.write(stderr)
             shutil.rmtree(tmp_dir)
             return ''
+    elif stdout.startswith("Something is wrong"):
+        sys.stderr.write("ERROR! Cannot parse %s\n"%pdb_file)
+        shutil.rmtree(tmp_dir)
+        return ''
     output_list=stdout.split()
     target,seqlen,domain_num=output_list[:3]
     domain_list=output_list[3:]
