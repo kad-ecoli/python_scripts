@@ -14,6 +14,11 @@ options:
     -dssp_path=./dssp
         path to DSSP executable. By default it is guessed by
         location of this script
+    -pulchra_path=./pulchra
+        path to pulchra executable. By default it is guessed by 
+        location of this script. pulchra is used to construct full atom
+        model from backbone model when the input structure contains too
+        few atoms.
     -log=DomainParser.log
         path to DomainParser output log. "-" for stdout
 '''
@@ -22,8 +27,13 @@ import shutil
 import random
 import subprocess
 import Bio.PDB
+import re
+import warnings
 
-def DomainParser(pdb_file,execpath="domainparser2.LINUX",dssp_path="dssp"):
+segment_pattern=re.compile("([-]{0,1}\d+)[-]([-]{0,1}\d+)")
+
+def DomainParser(pdb_file,execpath="domainparser2.LINUX",
+    dssp_path="dssp", pulchra_path="pulchra"):
     '''run DomainParser executable "execpath" using DSSP executable
     "dssp_path" on pdb file "pdb_file"
     '''
@@ -42,16 +52,58 @@ def DomainParser(pdb_file,execpath="domainparser2.LINUX",dssp_path="dssp"):
     io=Bio.PDB.PDBIO()
     io.set_structure(chain)
     io.save(tmp_pdb)
+    chain_id=chain.id
 
     #### run DomainParser ####
     cmd=' '.join(['cd',tmp_dir,';',
         'export DSSP_PATH='+dssp_path,';',
-        execpath,'xxxx'+chain.id
+        execpath,'xxxx'+chain_id
         ])
-    p=subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE)
+    p=subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE)
     stdout,stderr=p.communicate()
 
     #### parse output ####
+    if not stdout.strip():
+        if stderr.startswith("Missing sidechain atoms for"):
+
+            pul_cmd=' '.join(['cd',tmp_dir,';',pulchra_path,'-epc xxxx.pdb'])
+            subprocess.Popen(pul_cmd, stdout=subprocess.PIPE, shell=True,
+                ).communicate()
+            if os.path.isfile(tmp_dir+"xxxx.rebuilt.pdb"):
+                pdb_file=tmp_dir+"xxxx.rebuilt.pdb"
+            elif os.path.isfile(tmp_dir+"rebuilt_xxxx.pdb"):
+                pdb_file=tmp_dir+"rebuilt_xxxx.pdb"
+            elif os.path.isfile(tmp_dir+"pul_xxxx.pdb"):
+                pdb_file=tmp_dir+"pul_xxxx.pdb"
+            else:
+                sys.stderr.write(stderr)
+                shutil.rmtree(tmp_dir)
+                return ''
+            
+            warnings.filterwarnings("ignore",module="Bio.PDB.PDBIO")
+            warnings.filterwarnings("ignore",module="Bio.PDB.PDBParser")
+            warnings.filterwarnings("ignore",module="Bio.PDB.Atom")
+            struct = Bio.PDB.PDBParser(PERMISSIVE=1
+                ).get_structure(pdb_file,pdb_file)
+            model=struct[0]
+            chain=[c for c in model][0]
+            chain.id=chain_id
+            io=Bio.PDB.PDBIO()
+            io.set_structure(chain)
+            io.save(tmp_pdb)
+            warnings.resetwarnings()
+
+            p=subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE)
+            stdout,stderr=p.communicate()
+
+            if not stdout.strip():
+                shutil.rmtree(tmp_dir)
+                return ''
+        else:
+            sys.stderr.write(stderr)
+            shutil.rmtree(tmp_dir)
+            return ''
     output_list=stdout.split()
     target,seqlen,domain_num=output_list[:3]
     domain_list=output_list[3:]
@@ -61,7 +113,8 @@ def DomainParser(pdb_file,execpath="domainparser2.LINUX",dssp_path="dssp"):
         domain_file=basename.split('.')[0]+str(domain_idx+1)+".pdb"
         resi_list=[]
         for segment in domain.strip('()').split(';'):
-            resi_start,resi_end=segment.split('-')
+            #resi_start,resi_end=segment.split('-')
+            resi_start,resi_end=segment_pattern.findall(segment)[0]
             resi_list+=range(int(resi_start),int(resi_end)+1)
         
         class ResiSelect(Bio.PDB.Select): # class to select domain
@@ -81,6 +134,8 @@ if __name__=="__main__":
         "domainparser2.LINUX")
     dssp_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),
         "dssp")
+    pulchra_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),
+        "pulchra")
     log='DomainParser.log'
 
     if len(sys.argv)<2:
@@ -93,6 +148,8 @@ if __name__=="__main__":
             execpath=os.path.abspath(arg[len("-execpath="):])
         elif arg.startswith("-dssp_path="):
             dssp_path=os.path.abspath(arg[len("-dssp_path="):])
+        elif arg.startswith("-pulchra_path="):
+            log=os.path.abspath(arg[len("-pulchra_path="):])
         elif arg.startswith("-log="):
             log=arg[len("-log="):]
         elif arg.startswith("-"):
@@ -106,7 +163,7 @@ if __name__=="__main__":
     
     txt=''
     for arg in argv:
-        txt+=DomainParser(arg,execpath,dssp_path)+'\n'
+        txt+=DomainParser(arg,execpath,dssp_path,pulchra_path)+'\n'
 
     if log and log!='-':
         fp=open(log,'w')
