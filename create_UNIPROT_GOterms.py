@@ -45,6 +45,11 @@ option:
     PDB chain using pdb-uniprot mapping file "pdb2uniprot.map".
     pdb2uniprot.map is a two column tabular file. First column is PDB chain
     and second column is comma seperated list of uniprot ID
+
+-category={CAFA,NONIEA,ALL} evidence code category to use:
+    CAFA  : only UNIPROT_GOterms.CAFA* are generated
+    NONIEA: only UNIPROT_GOterms.{CAFA,NONIEA}* generated
+    ALL   : all UNIPROT_GOterms
 '''
 import sys,os
 import urllib
@@ -59,7 +64,7 @@ obo_url="http://geneontology.org/ontology/go-basic.obo"
 
 def parse_GOA(GOA='',
     excludeGO='GO:0005515,GO:0005488,GO:0003674,GO:0008150,GO:0005575', 
-    DB='',ID_map_dict=dict(),obo_dict=dict()):
+    DB='',ID_map_dict=dict(),obo_dict=dict(),category="ALL"):
     '''parse gene associatation file or SIFTS PDB-GO mapping file "GOA". 
     Return three dict whose key is an Aspect of GO and value is dict itself, 
     whose key is DB_Object_ID and value is GO ID: 
@@ -144,12 +149,13 @@ def parse_GOA(GOA='',
             accession_list=[accession]
 
         for accession in accession_list:
-            if not accession in ALL_dict[Aspect]:
-                ALL_dict[Aspect][accession]=[GOterm]
-            else:
-                ALL_dict[Aspect][accession].append(GOterm)
+            if category in {"ALL"}:
+                if not accession in ALL_dict[Aspect]:
+                    ALL_dict[Aspect][accession]=[GOterm]
+                else:
+                    ALL_dict[Aspect][accession].append(GOterm)
         
-            if evidence!="IEA":
+            if evidence!="IEA" and category in {"ALL","NONIEA"}:
                 if not accession in NONIEA_dict[Aspect]:
                     NONIEA_dict[Aspect][accession]=[GOterm]
                 else:
@@ -304,6 +310,7 @@ if __name__=="__main__":
     DB=''
     ID=''
     pdb2uniprot=''
+    category='ALL'
 
     # parse arguments
     argv=[] # input FASTA format alignment files
@@ -319,6 +326,8 @@ if __name__=="__main__":
             ID=arg[len("-ID="):]
         elif arg.startswith('-pdb2uniprot='):
             pdb2uniprot=arg[len("-pdb2uniprot="):]
+        elif arg.startswith('-category='):
+            category=arg[len("-category="):].upper()
         else:
             sys.stderr.write("ERROR! Unknown argument "+arg+'\n')
             exit()
@@ -355,9 +364,11 @@ if __name__=="__main__":
     merge_CAFA_dict=dict()
     for GOA in argv:
         ALL_dict,NONIEA_dict,CAFA_dict=parse_GOA(GOA,excludeGO,DB, \
-            ID_map_dict,obo_dict)
-        merge_ALL_dict=merge_GOA_dict(merge_ALL_dict,ALL_dict)
-        merge_NONIEA_dict=merge_GOA_dict(merge_NONIEA_dict,NONIEA_dict)
+            ID_map_dict,obo_dict,category)
+        if category in {"ALL"}:
+            merge_ALL_dict=merge_GOA_dict(merge_ALL_dict,ALL_dict)
+        if category in {"NONIEA","ALL"}:
+            merge_NONIEA_dict=merge_GOA_dict(merge_NONIEA_dict,NONIEA_dict)
         merge_CAFA_dict=merge_GOA_dict(merge_CAFA_dict,CAFA_dict)
 
     ## list of uniprot accession annotated with GO terms
@@ -370,22 +381,27 @@ if __name__=="__main__":
         suffix=".is_a"*is_a
 
         # all GO terms
-        GOterms_txt,GOterms_txt_Aspect=create_UNIPROT_GOterms(
-            uniprot_list_ALL,merge_ALL_dict,
-            obo_dict if is_a else False,excludeGO)
-        filename="UNIPROT_GOterms.ALL"+suffix
-        write_UNIPROT_GOterms_txt(GOterms_txt, GOterms_txt_Aspect, filename)
+        if category in {"ALL"}:
+            GOterms_txt,GOterms_txt_Aspect=create_UNIPROT_GOterms(
+                uniprot_list_ALL,merge_ALL_dict,
+                obo_dict if is_a else False,excludeGO)
+            filename="UNIPROT_GOterms.ALL"+suffix
+            write_UNIPROT_GOterms_txt(
+                GOterms_txt, GOterms_txt_Aspect, filename)
 
         # reviewed GO terms
-        GOterms_txt,GOterms_txt_Aspect=create_UNIPROT_GOterms(
-            uniprot_list_NONIEA,merge_NONIEA_dict,
-            obo_dict if is_a else False,excludeGO)
-        filename="UNIPROT_GOterms.NONIEA"+suffix
-        write_UNIPROT_GOterms_txt(GOterms_txt, GOterms_txt_Aspect, filename)
+        if category in {"NONIEA","ALL"}:
+            GOterms_txt,GOterms_txt_Aspect=create_UNIPROT_GOterms(
+                uniprot_list_NONIEA,merge_NONIEA_dict,
+                obo_dict if is_a else False,excludeGO)
+            filename="UNIPROT_GOterms.NONIEA"+suffix
+            write_UNIPROT_GOterms_txt(
+                GOterms_txt, GOterms_txt_Aspect, filename)
 
         # experimental GO terms used in CAFA evalulation
         GOterms_txt,GOterms_txt_Aspect=create_UNIPROT_GOterms(
             uniprot_list_CAFA,merge_CAFA_dict,
             obo_dict if is_a else False,excludeGO)
         filename="UNIPROT_GOterms.CAFA"+suffix
-        write_UNIPROT_GOterms_txt(GOterms_txt, GOterms_txt_Aspect, filename)
+        write_UNIPROT_GOterms_txt(
+            GOterms_txt, GOterms_txt_Aspect, filename)
