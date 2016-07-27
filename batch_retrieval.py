@@ -39,8 +39,8 @@ def batch_retrival(query_list=[],infmt="ACC",outfmt="fasta"):
 if __name__=="__main__":
     infmt="ACC"        # input uniprot accessions
     outfmt="fasta"     # output fasta sequences
-    split_size=1000000 # split full query list into small 
-                       # lists of one million entries
+    split_size=100000  # split full query list into small 
+                       # lists of one hundred thousand entries
 
     argv=[]
     for arg in sys.argv[1:]:
