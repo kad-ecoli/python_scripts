@@ -30,7 +30,7 @@ import Bio.PDB
 import re
 import warnings
 
-segment_pattern=re.compile("([-]{0,1}\d+)[-]([-]{0,1}\d+)")
+segment_pattern=re.compile("([-]{0,1}\d+)[A-Za-z]{0,1}[-]([-]{0,1}\d+)[A-Za-z]{0,1}")
 
 def DomainParser(pdb_file,execpath="domainparser2.LINUX",
     dssp_path="dssp", pulchra_path="pulchra"):

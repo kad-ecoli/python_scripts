@@ -64,7 +64,7 @@ def reindex_pdb(startindex,infile,outfile):
     index=startindex
     for residue in chain:
         if residue.id[0]==' ':
-            residue.id=(residue.id[0],index,residue.id[-1])
+            residue.id=(residue.id[0],index,' ')
             index+=1
 
     io=Bio.PDB.PDBIO()
