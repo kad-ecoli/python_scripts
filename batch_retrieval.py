@@ -19,6 +19,9 @@ url_mapping = 'http://www.uniprot.org/mapping/'
 url_upload = 'http://www.uniprot.org/uploadlists/'
 # set email here to help uniprot guys debug in case of problems.
 email = "zcx@umich.edu"
+# uniprot cannot parse very long list. If given a long list, the full query
+# list will be splitted into small lists of "split_size" entries
+split_size=20000
 
 def batch_retrival(query_list=[],infmt="ACC",outfmt="fasta"):
     params = {
@@ -39,8 +42,6 @@ def batch_retrival(query_list=[],infmt="ACC",outfmt="fasta"):
 if __name__=="__main__":
     infmt="ACC"        # input uniprot accessions
     outfmt="fasta"     # output fasta sequences
-    split_size=100000  # split full query list into small 
-                       # lists of one hundred thousand entries
 
     argv=[]
     for arg in sys.argv[1:]:
@@ -62,14 +63,22 @@ if __name__=="__main__":
     query_list=fp.read().splitlines()
     fp.close()
 
-    txt=''
-    for i in range(0,len(query_list),split_size):
-        page=batch_retrival(query_list[i:i+split_size],infmt,outfmt)
-        txt+=page
-
     if len(argv)>1:
         fp=open(argv[1],'w')
-        fp.write(txt)
-        fp.close()
     else:
-        sys.stdout.write(txt)
+        fp=sys.stdout
+
+    for i in range(0,len(query_list),split_size):
+        sys.stderr.write("Retrieving entries %u-%u\n"%(
+            i+1,min(i+split_size,len(query_list))))
+        while (True): # keep trying to retrieve entry until success
+            try:
+                page=batch_retrival(query_list[i:i+split_size],infmt,outfmt)
+                fp.write(page)
+                fp.flush()
+                break
+            except Exception,error:
+                sys.stderr.write(str(error)+'\n')
+
+    if len(argv)>1:
+        fp.close()
