@@ -2,10 +2,12 @@
 docstring='''DomainParser.py 16pkA.pdb > domain_list.txt
     run DomainParser on target PDB 16pkA.pdb to paritition it into domains. 
     Domains will be listed in "domain_list.txt" in the following format:
-        filename	length	domain_number	list_of_domain
-    (where list of domain is space separated list of PDB residue number ranges quoted inside parathesis)
+        basename	length	domain_number	list_of_domain
+    (where "basename" is the basename of input file name (without extension).
+    "list_of_domain" is space separated list of PDB residue number
+    ranges quoted inside parathesis)
     or, in case no domain are found:
-        filename	length	1
+        basename	length	1
 
 options:
     -execpath=./domainparser2.LINUX
@@ -132,7 +134,8 @@ def DomainParser(pdb_file,execpath="domainparser2.LINUX",
     #### cleanup temporary folder ####
     if os.path.isdir(tmp_dir):
         shutil.rmtree(tmp_dir)
-    return '\t'.join([basename,seqlen,domain_num,' '.join(domain_list)])
+    return '\t'.join([
+        basename.split('.')[0],seqlen,domain_num,' '.join(domain_list)])
 
 if __name__=="__main__":
     execpath=os.path.join(os.path.dirname(os.path.abspath(__file__)),
