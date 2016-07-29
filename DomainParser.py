@@ -49,6 +49,7 @@ def DomainParser(pdb_file,execpath="domainparser2.LINUX",
     struct = Bio.PDB.PDBParser(PERMISSIVE=1).get_structure(pdb_file,pdb_file)
     model=struct[0]
     chain=[c for c in model][0]
+    chain.id=chain.id[0].upper()
     io=Bio.PDB.PDBIO()
     io.set_structure(chain)
     io.save(tmp_pdb)
