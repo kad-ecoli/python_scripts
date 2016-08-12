@@ -69,6 +69,13 @@ def DomainParser(pdb_file,execpath="domainparser2.LINUX",
     #### parse output ####
     if not stdout.strip():
         if stderr.startswith("Missing sidechain atoms for"):
+            fp=open(tmp_pdb,'rU')
+            txt=''.join([line+'\n' for line in fp.read().splitlines() if \
+                line.startswith('ATOM  ') and line[12:16]==' CA '])
+            fp.close()
+            fp=open(tmp_pdb,'w')
+            fp.write(txt)
+            fp.close()
 
             pul_cmd=' '.join(['cd',tmp_dir,';',pulchra_path,'-epc xxxx.pdb'])
             subprocess.Popen(pul_cmd, stdout=subprocess.PIPE, shell=True,
