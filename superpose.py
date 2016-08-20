@@ -31,9 +31,11 @@ def sup_pymol(model_pdb,native_pdb, algo="pymol-super",
     check_nmr  - check whether "model_pdb" is multi-model NMR structure
     '''
     tmp_dir="/tmp/"+os.getenv("USER")+'/'+algo+ \
-       str(random.randint(1000,9999))+'/'
-    if not os.path.isdir(tmp_dir):
-        os.makedirs(tmp_dir)
+       str(random.randint(100000000,999999999))+'/'
+    while(os.path.isdir(tmp_dir)):
+        tmp_dir="/tmp/"+os.getenv("USER")+'/'+algo+ \
+            str(random.randint(100000000,999999999))+'/'
+    os.makedirs(tmp_dir)
     shutil.copy(model_pdb,tmp_dir+"model.pdb")
     shutil.copy(native_pdb,tmp_dir+"native.pdb")
 
@@ -219,9 +221,11 @@ def sup_TMalign(model_pdb,native_pdb, algo="TMalign",
     check_nmr  - check whether "model_pdb" is multi-model NMR structure
     '''
     tmp_dir="/tmp/"+os.getenv("USER")+'/'+algo+ \
-       str(random.randint(1000,9999))+'/'
-    if not os.path.isdir(tmp_dir):
-        os.makedirs(tmp_dir)
+       str(random.randint(100000000,999999999))+'/'
+    while(os.path.isdir(tmp_dir)):
+        tmp_dir="/tmp/"+os.getenv("USER")+'/'+algo+ \
+            str(random.randint(100000000,999999999))+'/'
+    os.makedirs(tmp_dir)
     shutil.copy(model_pdb,tmp_dir+"model.pdb")
     shutil.copy(native_pdb,tmp_dir+"native.pdb")
 
