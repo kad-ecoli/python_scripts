@@ -11,7 +11,8 @@ options:
     -algo={TMalign,TMscore,MMalign,pymol-super,pymol-cealign,pymol-align}
         Algorithm used for superposition. 
     -execpath=/usr/bin/TMalign
-        Path to executable. default is searching in $PATH
+        Path to executable. default is searching in the same folder of this
+        script and then search in $PATH
 '''
 import sys,os
 import subprocess
@@ -362,6 +363,11 @@ def superpose(model_pdb="mobile.pdb",native_pdb="target.pdb",
             execpath="pymol"
         else:
             execpath=algo
+
+        execpath_cur=os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),execpath)
+        if os.path.isfile(execpath_cur):
+            execpath=execpath_cur
 
     if algo in ("TMscore","TMalign","MMalign"):
         pdb_txt,RMSD_lst,TMscore_lst=sup_TMalign(
