@@ -18,8 +18,8 @@ Options:
     -range={all,short,medium,long} sequences seperation range x
         "all":     1<=x
         "short":   6<=x<12
-        "medium": 12<=x<=24
-        "long":    24<x   (most useful)
+        "medium": 12<=x<24
+        "long":   24<=x   (most useful)
         (default): 6<=x
 
 
@@ -87,15 +87,15 @@ def read_contact_map(infile="contact.map",
         seperation=abs(resi_idx1-resi_idx2)
 
         if (sep_range=="short"  and not  6<=seperation<12 ) or \
-           (sep_range=="medium" and not 12<=seperation<=24) or \
-           (sep_range=="long"   and not  24<seperation    ) or \
+           (sep_range=="medium" and not 12<=seperation<24) or \
+           (sep_range=="long"   and not 24<=seperation    ) or \
            (not sep_range!="all" and seperation<int(sep_range)):
             continue
 
         if cscore<=cutoff_all or \
-          (cscore<=cutoff_short  and     seperation<=12) or \
-          (cscore<=cutoff_medium and 12<=seperation<=24) or \
-          (cscore<=cutoff_long   and  24<seperation):
+          (cscore<=cutoff_short  and    seperation<=12) or \
+          (cscore<=cutoff_medium and 12<=seperation<24) or \
+          (cscore<=cutoff_long   and 24<=seperation):
             continue
 
         resi1.append(resi_idx1)
@@ -201,13 +201,13 @@ def calc_acc_contact(cmp_list,L,sep_range="6"):
 
     if not sep_range in {"short","long"}:
         top_pred["medm1" ]=[res_pair for res_pair in cmp_list if \
-            12<=abs(res_pair[0]-res_pair[1])<=24][:L]
+            12<=abs(res_pair[0]-res_pair[1])<24][:L]
         top_pred["medm2" ]=top_pred["medm1" ][:int(L/2)]
         top_pred["medm5" ]=top_pred["medm1" ][:int(L/5)]
 
     if not sep_range in {"short","medium"}:
         top_pred["long1" ]=[res_pair for res_pair in cmp_list if \
-            24<abs(res_pair[0]-res_pair[1])   ][:L]
+            24<=abs(res_pair[0]-res_pair[1])   ][:L]
         top_pred["long2" ]=top_pred["long1" ][:int(L/2)]
         top_pred["long5" ]=top_pred["long1" ][:int(L/5)]
 
@@ -234,8 +234,8 @@ def calc_res_contact(res_dist_list,sep_range="6",cutoff=8):
     sep_range - range of sequence seperations x
         "all":    1<=x
         "short":  6<=x<12
-        "medium":12<=x<=24
-        "long":   24<x   (most useful)
+        "medium":12<=x<24
+        "long":  24<=x   (most useful)
         (default): 6<=x'''
     res_dist_list_con=res_dist_list
     cutoff=float(cutoff)
@@ -247,9 +247,9 @@ def calc_res_contact(res_dist_list,sep_range="6",cutoff=8):
     elif sep_range=="short":
         return [e for e in res_dist_list_con if 6<=abs(e[0]-e[1])<12]
     elif sep_range=="medium":
-        return [e for e in res_dist_list_con if 12<=abs(e[0]-e[1])<=24]
+        return [e for e in res_dist_list_con if 12<=abs(e[0]-e[1])<24]
     elif sep_range=="long":
-        return [e for e in res_dist_list_con if  24<abs(e[0]-e[1])]
+        return [e for e in res_dist_list_con if 24<=abs(e[0]-e[1])]
     else:
         return [e for e in res_dist_list_con if int(sep_range)<=abs(e[0]-e[1])]
 
