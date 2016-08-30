@@ -37,7 +37,7 @@ def split_fasta(infile="seq.txt",outfile="seq.fasta",outdir='',
     outfile_list=[outfile] if isinstance(outfile,str) else outfile
 
     exclude_set=set()
-    if exclude_list:
+    if exclude_list and os.path.isfile(exclude_list):
         fp=open(exclude_list,'rU')
         exclude_set=set([line.split()[0] for line in \
             fp.read().splitlines() if line.strip()])
