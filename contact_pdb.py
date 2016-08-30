@@ -1,6 +1,59 @@
 #!/usr/bin/env python
 # 2016-01-28 Chengxin Zhang
-'''Calculate residue contacts in the given PDB file'''
+docstring='''
+contact_pdb.py [options] pdb.pdb
+    Calculate residue contacts in single chain PDB file "pdb.pdb"
+
+Options:
+    -cutoff=8  distance cutoff (in Angstrom) for contact, usu between 6 and 12
+
+    -atom={CA,CB} calculate distance between "CA" for all residues, or "CA" for 
+        gly and "CB" for other 19 amino acids
+
+    -outfmt={list,dist,plot} output format:
+        "list": tab-eliminated list listing residue index for contact pairs
+        "dist": tab-eliminated list listing residue distances for all pairs
+        "plot": a matplotlib plot visualizing contacts, not implemented
+
+    -range={all,short,medium,long} sequences seperation range x
+        "all":     1<=x
+        "short":   6<=x<12
+        "medium": 12<=x<24
+        "long":   24<=x   (most useful)
+        (default): 6<=x
+
+
+contact_pdb.py [options] pdb.pdb contact.map
+    Calculate accuracy of residue contacts map "contact.map" according to
+    in single chain PDB file "pdb.pdb"
+
+    "contact.map" could be of NN-BAYES contact map format (resi1 resi2 p)
+    or CASP Residue-Residue Separation Distance Prediction Format
+    (resi1 resi2 dist_lower dist_upper p). See 
+    http://predictioncenter.org/casproll/index.cgi?page=format#RR
+
+Options:
+    -cutoff=8
+
+    -atom={CA,CB}
+
+    -range={all,short,medium,long}
+
+    -outfmt={list,dist,stat} output format:
+        "list": list showing if predicted contact pairs are TRUE
+                #resi1 resi2 dist TRUE/FALSE p
+        "dist": the same as above but actual distance is also reported
+                #resi1 resi2 dist TRUE/FALSE p
+        "stat": statistics on accuracy (ACC): (short2 stands for short range
+                contact ACC for top L/2, L=protein length)
+                #short1 short2 short5 medm1 medm2 medm5 long1 long2 long5
+                    all1 all2 all5
+
+    -cutoff_all=0      # ignore contact prediction p<=0
+    -cutoff_short=0.5  # ignore short  range contact prediction p<=0.5
+    -cutoff_medium=0.4 # ignore medium range contact prediction p<=0.4
+    -cutoff_long=0.3   # ignore medium range contact prediction p<=0.3
+'''
 import sys,os
 import re
 
@@ -135,32 +188,40 @@ def compare_res_contact(res_dist_list,res_pred_list,cutoff=8):
     cmp_list=zip(resi1,resi2,dist,contact,p)
     return cmp_list
 
-def calc_acc_contact(cmp_list,L):
+def calc_acc_contact(cmp_list,L,sep_range="6"):
     '''Calculate residue contact accuracy using ouput if "compare_res_contact"
     and length of protein 'L" '''
     top_pred=dict() # top L, L/2, L/5 prediction
-        
-    top_pred["short1"]=[res_pair for res_pair in cmp_list if \
-                 6<=abs(res_pair[0]-res_pair[1])<12][:L]
-    top_pred["medm1" ]=[res_pair for res_pair in cmp_list if \
-                12<=abs(res_pair[0]-res_pair[1])<24][:L]
-    top_pred["long1" ]=[res_pair for res_pair in cmp_list if \
-                24<=abs(res_pair[0]-res_pair[1])   ][:L]
-    top_pred["all1"  ]=cmp_list[:L]
+    
+    if not sep_range in {"medium","long"}:
+        top_pred["short1"]=[res_pair for res_pair in cmp_list if \
+            6<=abs(res_pair[0]-res_pair[1])<12][:L]
+        top_pred["short2"]=top_pred["short1"][:int(L/2)]
+        top_pred["short5"]=top_pred["short1"][:int(L/5)]
 
-    top_pred["short2"]=top_pred["short1"][:int(L/2)]
-    top_pred["medm2" ]=top_pred["medm1" ][:int(L/2)]
-    top_pred["long2" ]=top_pred["long1" ][:int(L/2)]
-    top_pred["all2"  ]=top_pred["all1"  ][:int(L/2)]
+    if not sep_range in {"short","long"}:
+        top_pred["medm1" ]=[res_pair for res_pair in cmp_list if \
+            12<=abs(res_pair[0]-res_pair[1])<24][:L]
+        top_pred["medm2" ]=top_pred["medm1" ][:int(L/2)]
+        top_pred["medm5" ]=top_pred["medm1" ][:int(L/5)]
 
-    top_pred["short5"]=top_pred["short1"][:int(L/5)]
-    top_pred["medm5" ]=top_pred["medm1" ][:int(L/5)]
-    top_pred["long5" ]=top_pred["long1" ][:int(L/5)]
-    top_pred["all5"  ]=top_pred["all1"  ][:int(L/5)]
+    if not sep_range in {"short","medium"}:
+        top_pred["long1" ]=[res_pair for res_pair in cmp_list if \
+            24<=abs(res_pair[0]-res_pair[1])   ][:L]
+        top_pred["long2" ]=top_pred["long1" ][:int(L/2)]
+        top_pred["long5" ]=top_pred["long1" ][:int(L/5)]
+
+    if not sep_range in {"short","medium","long"}:
+        top_pred["all1"  ]=cmp_list[:L]
+        top_pred["all2"  ]=top_pred["all1"  ][:int(L/2)]
+        top_pred["all5"  ]=top_pred["all1"  ][:int(L/5)]
 
     ACC=dict() # accuracy
     for key in top_pred:
-        ACC[key]=1.*len([e for e in top_pred[key] if e[3]=="TRUE"])/len(top_pred[key])
+        if top_pred[key]:
+            ACC[key]=1.*len([e for e in top_pred[key] if e[3]=="TRUE"])/len(top_pred[key])
+        else:
+            ACC[key]=-1 # error
     return ACC,top_pred
 
 
@@ -193,60 +254,6 @@ def calc_res_contact(res_dist_list,sep_range="6",cutoff=8):
         return [e for e in res_dist_list_con if int(sep_range)<=abs(e[0]-e[1])]
 
 if __name__=="__main__":
-    docstring='''
-contact_pdb.py [options] pdb.pdb
-    Calculate residue contacts in single chain PDB file "pdb.pdb"
-
-Options:
-    -cutoff=8  distance cutoff (in Angstrom) for contact, usu between 6 and 12
-
-    -atom={CA,CB} calculate distance between "CA" for all residues, or "CA" for 
-        gly and "CB" for other 19 amino acids
-
-    -outfmt={list,dist,plot} output format:
-        "list": tab-eliminated list listing residue index for contact pairs
-        "dist": tab-eliminated list listing residue distances for all pairs
-        "plot": a matplotlib plot visualizing contacts, not implemented
-
-    -range={all,short,medium,long} sequences seperation range x
-        "all":     1<=x
-        "short":   6<=x<12
-        "medium": 12<=x<24
-        "long":   24<=x   (most useful)
-        (default): 6<=x
-
-
-contact_pdb.py [options] pdb.pdb contact.map
-    Calculate accuracy of residue contacts map "contact.map" according to
-    in single chain PDB file "pdb.pdb"
-
-    "contact.map" could be of NN-BAYES contact map format (resi1 resi2 p)
-    or CASP Residue-Residue Separation Distance Prediction Format
-    (resi1 resi2 dist_lower dist_upper p). See 
-    http://predictioncenter.org/casproll/index.cgi?page=format#RR
-
-Options:
-    -cutoff=8
-
-    -atom={CA,CB}
-
-    -range={all,short,medium,long}
-
-    -outfmt={list,dist,stat} output format:
-        "list": list showing if predicted contact pairs are TRUE
-                #resi1 resi2 dist TRUE/FALSE p
-        "dist": the same as above but actual distance is also reported
-                #resi1 resi2 dist TRUE/FALSE p
-        "stat": statistics on accuracy (ACC): (short2 stands for short range
-                contact ACC for top L/2, L=protein length)
-                #short1 short2 short5 medm1 medm2 medm5 long1 long2 long5
-                    all1 all2 all5
-
-    -cutoff_all=0      # ignore contact prediction p<=0
-    -cutoff_short=0.5  # ignore short  range contact prediction p<=0.5
-    -cutoff_medium=0.4 # ignore medium range contact prediction p<=0.4
-    -cutoff_long=0.3   # ignore medium range contact prediction p<=0.3
-'''
     if len(sys.argv)<2:
         print >>sys.stderr,docstring
         exit()
@@ -266,6 +273,8 @@ Options:
             atom_sele=arg[len("-atom="):]
         elif arg.startswith("-range="):
             sep_range=arg[len("-range="):]
+            if sep_range=="medm":
+                sep_range="medium"
         elif arg.startswith("-outfmt="):
             outfmt=arg[len("-outfmt="):]
         elif arg.startswith("-cutoff_all="):
@@ -315,11 +324,18 @@ Options:
             L=map(list,zip(*res_dist_list))
             L=L[0]+L[1]
             L=max(L)-min(L)+1
-            ACC,top_pred=calc_acc_contact(cmp_list,L)
-            key_list=["short1","short2","short5",
-                      "medm1" ,"medm2" ,"medm5",
-                      "long1" ,"long2" ,"long5",
-                      "all1"  ,"all2"  ,"all5"]
+            ACC,top_pred=calc_acc_contact(cmp_list,L,sep_range)
+            if sep_range == "short":
+                key_list=["short1","short2","short5"]
+            elif sep_range == "medium":
+                key_list=["medm1" ,"medm2" ,"medm5"]
+            elif sep_range == "long":
+                key_list=["long1" ,"long2" ,"long5"]
+            else:
+                key_list=["short1","short2","short5",
+                          "medm1" ,"medm2" ,"medm5",
+                          "long1" ,"long2" ,"long5",
+                          "all1"  ,"all2"  ,"all5"]
             sys.stderr.write('\t'.join(key_list)+'\n')
             print '\t'.join(['%.3f'%ACC[key] for key in key_list])
 

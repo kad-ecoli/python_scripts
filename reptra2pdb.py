@@ -1,14 +1,19 @@
 #!/usr/bin/env python
 # 2016-01-03 Chengxin Zhang
 docstring='''
-reptra2pdb.py seq.fasta rep1.tra1.bz2
+reptra2pdb.py rep*.tra*.bz2 > alldecoy.ent
 
-Read I-TASSER/QUARK decoy set "rep1.tra1.bz2" and output PDB according to
-amino acids sequence specified by FASTA sequence "seq.fasta"
+Convert SPICKER format I-TASSER/QUARK decoy sets "rep*.tra*.bz2" to one
+multimodel PDB file "alldecoy.ent"
 
-This script generates hundreds of single model PDB files at current directory, 
-named "rep1.tra1.00001.pdb" and so on. This script also generates one multimodel 
-PDB file "rep1.tra1.ent"
+option:
+    -seq="seq.fasta"
+        use amino acid sequence specified by FASTA sequence "seq.fasta"
+    -singlemodel={False,True} 
+        whether to generate generates hundreds of single model PDB files at
+        current directory, named "rep1.tra1.00001.pdb" and so on.
+    -delta=1
+        convert take only one decoy from every "delta" decoys.
 '''
 import sys,os
 import bz2
@@ -19,7 +24,7 @@ aa1to3 = { # 3 letter to 1 letter amino acid code conversion
     'I':'ILE', 'L':'LEU', 'D':'ASP', 'E':'GLU', 'K':'LYS',
     'R':'ARG', 'S':'SER', 'T':'THR', 'Y':'TYR', 'H':'HIS',
     'C':'CYS', 'N':'ASN', 'Q':'GLN', 'W':'TRP', 'G':'GLY',
-    #'B':'ASX', 'Z':'GLX', 'U':'SEC', 'O':'PYL', 'J':'UNK', 'X':'UNK'
+    'B':'ASX', 'Z':'GLX', 'U':'SEC', 'O':'PYL', 'J':'UNK', 'X':'UNK'
     }
 
 def readFastaOrRawSequence(infile="seq.fasta"):
@@ -58,19 +63,20 @@ def split_reptra(infile="rep1.tra1.bz2"):
 
 def convert_single_decoy_to_PDB(decoy_txt='',sequence=""):
     '''read I-TASSER/QUARK decoy set file "rep1.tra1.bz2"
-    return a list of plain text for each decoy
+    return a tuple plain text for each decoy. first element of tuple is 
+    the "ATOM" record while the second element is the "CONECT" record
     '''
     if not decoy_txt.strip():
         sys.stderr.write("ERROR! Empty trajectory!\n")
         return ''
 
     pattern=re.compile("^\s+[-.\d]+\s+[-.\d]+\s+[-.\d]+$")
-    pdb_txt=''
+    atom_txt=''
     aa_index=-1
-    # add ATOM entries
+    ### add ATOM entries ###
     for line in decoy_txt.splitlines():
         if not pattern.match(line):
-            pdb_txt+=line+'\n'
+            atom_txt+=line+'\n'
             continue
         if not line.strip():
             continue
@@ -105,8 +111,8 @@ COLUMNS        DATA TYPE       CONTENTS
         atom_serial_number=' '*(5-len(serial_number))+serial_number
         atom_name="  CA "
         alternate_location_indicator=" "
-        residue_name=aa1to3[sequence[aa_index]] if sequence else \
-            "ALA" # 3 letter residue name, ALA if not specified
+        # 3 letter residue name, ALA if not specified
+        residue_name=aa1to3[sequence[aa_index]] if sequence else "ALA"
         chain_identifier=" A"
         residue_sequence_number=' '*(4-len(serial_number))+serial_number
         residue_insertion_code='    '
@@ -130,16 +136,13 @@ COLUMNS        DATA TYPE       CONTENTS
              X_coordinate                + \
              Y_coordinate                + \
              Z_coordinate                + \
-             occupancy                   + \
-             Bfactor                     + \
-             segment_identifier          + \
-             element_symbol              + \
-             charge
+             '\n'
 
-        pdb_txt+=line+'\n'
+        atom_txt+=line
 
-    # add CONECT entries
-    for line in pdb_txt.splitlines():
+    ### add CONECT entries ###
+    conect_txt=''
+    for line in atom_txt.splitlines():
         if not line.strip() or not line.startswith("ATOM  "):
             continue
         '''
@@ -159,58 +162,87 @@ COLUMNS       DATA  TYPE      FIELD        DEFINITION
         serial_number_prev=' '*(5-len(serial_number_prev))+serial_number_prev
 
         record_name="CONECT"
-        pdb_txt+=record_name       + \
+        conect_txt+=record_name    + \
                  serial_number_prev+ \
                  serial_number     + \
-                 ' '*64+'\n'
+                 '\n'
 
-    return pdb_txt
+    return (atom_txt,conect_txt)
 
-def reptra2pdb(decoy_set="rep1.tra1.bz2",sequence=""):
-    '''Read I-TASSER/QUARK decoy set "rep1.tra1.bz2" and output PDB according
-    to amino acids sequence'''
+def reptra2pdb(decoy_set="rep1.tra1.bz2",sequence='',singlemodel=False,
+    model_serial_number=0,delta=1):
+    '''Read I-TASSER/QUARK decoy set "decoy_set" and output PDB according
+    to amino acids sequence "sequence"
+
+    singlemodel - whether to write PDB for individual decoy
+    model_serial_number - first model serial number must be larger than
+                  this number
+    delta - pick one decoy for every "delta" decoys
+    '''
     decoy_txt_list=split_reptra(infile=decoy_set)
 
     basename=decoy_set.split(os.path.sep)[-1]
     if basename.endswith(".bz2"):
         basename=basename[:-len(".bz2")]
     
-    multimodel_PDB_txt=''
+    multimodel_atom_txt=''
     for decoy_index,decoy_txt in enumerate(decoy_txt_list):
-        pdb_txt=convert_single_decoy_to_PDB(
-            decoy_txt=decoy_txt,sequence=sequence)
+        if int(decoy_index/delta)!=float(decoy_index)/delta:
+            continue
+        atom_txt,conect_txt=convert_single_decoy_to_PDB(decoy_txt,sequence)
 
-        model_serial_number=str(decoy_index+1)
-        model_serial_number=' '*(4-len(model_serial_number))+model_serial_number
-        multimodel_PDB_txt+="MODEL     "+model_serial_number+' '*66+'\n' \
-            +pdb_txt+"ENDMDL"+' '*74+'\n'
-
-        suffix=str(decoy_index+1)
-        suffix='0'*(5-len(suffix))+suffix
-        filename=basename+'.'+suffix+".pdb"
-        print filename
-
-        fp=open(filename,'w')
-        fp.write(pdb_txt)
-        fp.close()
-    multimodel_PDB_txt+="END"+' '*77+'\n'
-    filename=basename+".ent"
-    print filename
-    fp=open(filename,'w')
-    fp.write(multimodel_PDB_txt)
-    fp.close()
-    return decoy_index
+        model_serial_number+=1
+        multimodel_atom_txt+="MODEL     "+' '*(4-len(str(model_serial_number))
+            )+str(model_serial_number)+'\n'+atom_txt+"ENDMDL"+'\n'
+        
+        if singlemodel:
+            suffix=str(decoy_index+1)
+            suffix='0'*(5-len(suffix))+suffix
+            filename=basename+'.'+suffix+".pdb"
+            sys.stderr.write(filename+'\n')
+            fp=open(filename,'w')
+            fp.write(atom_txt+conect_txt)
+            fp.close()
+    #multimodel_atom_txt+=conect_txt+"END"+' '*77+'\n'
+    return multimodel_atom_txt,conect_txt,model_serial_number
 
 if __name__=="__main__":
-    if len(sys.argv)<2:
+    singlemodel=False
+    delta=1
+    seq=''
+
+    argv=[]
+    for arg in sys.argv[1:]:
+        if arg.startswith("-singlemodel="):
+            singlemodel=(arg[len("-singlemodel="):].lower()=="true")
+        elif arg.startswith("-delta="):
+            delta=int(arg[len("-delta="):])
+        elif arg.startswith("-seq="):
+            seq=arg[len("-seq="):]
+        elif arg.startswith('-'):
+            sys.stderr.write("ERROR! Unknown option %s\n"%arg)
+        else:
+            argv.append(arg)
+
+    if len(argv)==0:
         sys.stderr.write(docstring)
         exit()
-    elif len(sys.argv)<3:
+
+    sequence=''
+    if seq:
+        if not os.path.isfile(seq):
+            sys.stderr.write("ERROR! no such file %s\n"%seq)
+            exit()
+        sequence=readFastaOrRawSequence(seq)
+    else:
         sys.stderr.write("WARNING! You have not specified sequence. " \
             "Use ALA for all residues\n")
-        for decoy_set in sys.argv[1:]:
-            reptra2pdb(decoy_set)
-    else:
-        sequence=readFastaOrRawSequence(sys.argv[1])
-        for decoy_set in sys.argv[2:]:
-            reptra2pdb(decoy_set, sequence)
+    
+    txt=''
+    model_serial_number=0
+    for decoy_set in argv:
+        atom_txt,conect_txt,model_serial_number=reptra2pdb(decoy_set,
+            sequence,singlemodel,model_serial_number,delta)
+        txt+=atom_txt
+    txt+=conect_txt+"END\n"
+    sys.stdout.write(txt)
