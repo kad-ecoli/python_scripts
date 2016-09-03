@@ -50,6 +50,12 @@ option:
     CAFA  : only UNIPROT_GOterms.CAFA* are generated
     NONIEA: only UNIPROT_GOterms.{CAFA,NONIEA}* generated
     ALL   : all UNIPROT_GOterms
+
+-infmt={GOA,SIFTS,INTERPRO} input format of gene association file
+    (default): automatically detect whether format is GOA or SIFTS
+    GOA      : Gene Assoication file in GAF format
+    SIFTS    : PDB GO mapping by SIFTS project
+    INTERPRO : TSV format InterProScan output
 '''
 import sys,os
 import urllib
@@ -64,7 +70,7 @@ obo_url="http://geneontology.org/ontology/go-basic.obo"
 
 def parse_GOA(GOA='',
     excludeGO='GO:0005515,GO:0005488,GO:0003674,GO:0008150,GO:0005575', 
-    DB='',ID_map_dict=dict(),obo_dict=dict(),category="ALL"):
+    DB='',ID_map_dict=dict(),obo_dict=dict(),category="ALL",infmt=''):
     '''parse gene associatation file or SIFTS PDB-GO mapping file "GOA". 
     Return three dict whose key is an Aspect of GO and value is dict itself, 
     whose key is DB_Object_ID and value is GO ID: 
@@ -81,6 +87,10 @@ def parse_GOA(GOA='',
                 UNIPROT GO mapping file
                 default take all entries without mapping
     obo_dict - obo2csv.obo class for parsing SIFTS PDB-GO mapping
+    infmt    - input file format. empty for auto-detection between GOA and SIFTS
+               GOA      : Gene Assoication file in GAF format
+               SIFTS    : PDB GO mapping by SIFTS project
+               INTERPRO : TSV format InterProScan output
     '''
     if isinstance(excludeGO,str):
         excludeGO=excludeGO.split(',')
@@ -99,12 +109,35 @@ def parse_GOA(GOA='',
     fp.close()
     GO_count=len(GOA_lines)
 
-    infmt="GOA" # gene association file
-    if GOA_lines[0].startswith('#') and GOA_lines[1].startswith("PDB"):
-        infmt="SIFTS" # SIFTS PDB-GO mapping file
-        GOA_lines=GOA_lines[2:]
+    if not infmt:
+        infmt="GOA" # gene association file
+        if GOA_lines[0].startswith('#') and GOA_lines[1].startswith("PDB"):
+            infmt="SIFTS" # SIFTS PDB-GO mapping file
+            GOA_lines=GOA_lines[2:]
 
-    ## parse GO association
+    ### parse InterproScan TSV output ###
+    if infmt=="INTERPRO":
+        ## parse text
+        for line in GOA_lines:
+            line=line.split('\t')
+            accession=line[0]
+            if not "GO:" in line[-1]:
+                continue # only parse line with GO annotation
+            GOterms_list=[e for e in line[-1].split('|') if not e in excludeGO]
+            for GOterm in GOterms_list:
+                for Aspect in ALL_dict:
+                    if GOterm in obo_dict[Aspect]['Term']:
+                        if not accession in ALL_dict[Aspect]:
+                            ALL_dict[Aspect][accession]=[GOterm]
+                        elif not GOterm in ALL_dict[Aspect][accession]:
+                            ALL_dict[Aspect][accession].append(GOterm)
+        ## sort GO terms for each accession
+        for Aspect in ALL_dict:
+            for accession in ALL_dict[Aspect]:
+                ALL_dict[Aspect][accession].sort()
+        return ALL_dict,NONIEA_dict,CAFA_dict
+
+    ### parse GAF or SIFTS format GO association ###
     for line_idx,line in enumerate(GOA_lines):
         if int(GO_count/100) and line_idx % int(GO_count/100) ==0:
             sys.stderr.write('*')
@@ -112,7 +145,7 @@ def parse_GOA(GOA='',
             GO_count-=1
             continue
         line=line.split('\t')
-        
+
         if infmt=="SIFTS":
             source_database="PDB"
             accession=line[0]+line[1]
@@ -311,6 +344,7 @@ if __name__=="__main__":
     ID=''
     pdb2uniprot=''
     category='ALL'
+    infmt='' # guess whether it is GOA or SIFTS
 
     # parse arguments
     argv=[] # input FASTA format alignment files
@@ -328,6 +362,8 @@ if __name__=="__main__":
             pdb2uniprot=arg[len("-pdb2uniprot="):]
         elif arg.startswith('-category='):
             category=arg[len("-category="):].upper()
+        elif arg.startswith('-infmt='):
+            infmt=arg[len("-infmt="):].upper()
         else:
             sys.stderr.write("ERROR! Unknown argument "+arg+'\n')
             exit()
@@ -364,7 +400,7 @@ if __name__=="__main__":
     merge_CAFA_dict=dict()
     for GOA in argv:
         ALL_dict,NONIEA_dict,CAFA_dict=parse_GOA(GOA,excludeGO,DB, \
-            ID_map_dict,obo_dict,category)
+            ID_map_dict,obo_dict,category,infmt)
         if category in {"ALL"}:
             merge_ALL_dict=merge_GOA_dict(merge_ALL_dict,ALL_dict)
         if category in {"NONIEA","ALL"}:
@@ -385,12 +421,15 @@ if __name__=="__main__":
             GOterms_txt,GOterms_txt_Aspect=create_UNIPROT_GOterms(
                 uniprot_list_ALL,merge_ALL_dict,
                 obo_dict if is_a else False,excludeGO)
-            filename="UNIPROT_GOterms.ALL"+suffix
+            if infmt=="INTERPRO":
+                filename="INTERPRO_GOterms"+suffix
+            else:
+                filename="UNIPROT_GOterms.ALL"+suffix
             write_UNIPROT_GOterms_txt(
                 GOterms_txt, GOterms_txt_Aspect, filename)
 
         # reviewed GO terms
-        if category in {"NONIEA","ALL"}:
+        if category in {"NONIEA","ALL"} and infmt!="INTERPRO":
             GOterms_txt,GOterms_txt_Aspect=create_UNIPROT_GOterms(
                 uniprot_list_NONIEA,merge_NONIEA_dict,
                 obo_dict if is_a else False,excludeGO)
@@ -399,9 +438,10 @@ if __name__=="__main__":
                 GOterms_txt, GOterms_txt_Aspect, filename)
 
         # experimental GO terms used in CAFA evalulation
-        GOterms_txt,GOterms_txt_Aspect=create_UNIPROT_GOterms(
-            uniprot_list_CAFA,merge_CAFA_dict,
-            obo_dict if is_a else False,excludeGO)
-        filename="UNIPROT_GOterms.CAFA"+suffix
-        write_UNIPROT_GOterms_txt(
-            GOterms_txt, GOterms_txt_Aspect, filename)
+        if infmt!="INTERPRO":
+            GOterms_txt,GOterms_txt_Aspect=create_UNIPROT_GOterms(
+                uniprot_list_CAFA,merge_CAFA_dict,
+                obo_dict if is_a else False,excludeGO)
+            filename="UNIPROT_GOterms.CAFA"+suffix
+            write_UNIPROT_GOterms_txt(
+                GOterms_txt, GOterms_txt_Aspect, filename)
