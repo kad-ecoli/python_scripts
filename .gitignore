@@ -2,4 +2,4 @@
 *.pyc
 
 # vim temporary backup
-.*.swp
+.*.sw*
