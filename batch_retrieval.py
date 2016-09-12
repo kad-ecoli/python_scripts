@@ -18,9 +18,11 @@ Options:
     -db=uniprot_sprot.fasta.gz
         (only valid if -outfmt=fasta)
         directly extract fasta sequence from FASTA format sequence database
+        only accession as will be preserved as fasta header
 '''
 import urllib,urllib2
 import sys,os
+import subprocess
 
 url_mapping = 'http://www.uniprot.org/mapping/'
 url_upload = 'http://www.uniprot.org/uploadlists/'
@@ -70,18 +72,28 @@ def batch_retrival(query_list=[],infmt="ACC",outfmt="fasta",db=''):
     page = response.read()
     return page
 
-def remove_entry_already_fetch(query_list,outfile):
-    '''remove entries already outfile'''
-    already_fetch_list=[]
-    fp=open(outfile,'rU')
-    for line in fp.read().splitlines():
-        if line.startswith('>'):
-            line=line.split()[0].lstrip('>')
-            if '|' in line:
-                line=line.split('|')[1]
-            already_fetch_list.append(line)
-    fp.close()
-    query_list=[line for line in query_list if not line in already_fetch_list]
+def get_accession_list_from_fasta(fasta_file):
+    '''get a list of accessions from fasta. 
+    This is faster than a pure python implement.
+    '''
+    if not os.path.isfile(fasta_file):
+        return []
+    cmd='z'*fasta_file.endswith(".gz")+ "grep '>' %s|"%fasta_file+ \
+        "sed 's/^>[a-z]\{1,\}|//g'|sed 's/^>//g'|cut -d' ' -f1|cut -d'|' -f1"
+    p=subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE)
+    stdout,stderr=p.communicate()
+    return stdout.splitlines()
+
+def remove_entry_not_in_fasta_file(query_list,fasta_file):
+    '''remove entries not in fasta file'''
+    fasta_header_list=get_accession_list_from_fasta(fasta_file)
+    query_list=list(set(query_list).intersection(fasta_header_list))
+    return query_list
+
+def remove_entry_in_fasta_file(query_list,fasta_file):
+    '''remove entries in fasta file'''
+    fasta_header_list=get_accession_list_from_fasta(fasta_file)
+    query_list=list(set(query_list).difference(fasta_header_list))
     return query_list
 
 if __name__=="__main__":
@@ -115,9 +127,17 @@ if __name__=="__main__":
     fp=open(argv[0],'rU')
     query_list=fp.read().splitlines()
     fp.close()
+    sys.stdout.write("%u query entries\n"%len(query_list))
+
+    if db:
+        if infmt=="ACC":
+            query_list=remove_entry_not_in_fasta_file(query_list,db)
+            sys.stdout.write("%u query entries in db\n"%len(query_list))
 
     if outfmt=="fasta":
-        query_list=remove_entry_already_fetch(query_list,argv[1])
+        if infmt=="ACC":
+            query_list=remove_entry_in_fasta_file(query_list,argv[1])
+            sys.stdout.write("%u query entries not fetched\n"%len(query_list))
         fp=open(argv[1],'a')
     else:
         fp=open(argv[1],'w')
