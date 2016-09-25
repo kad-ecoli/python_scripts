@@ -117,6 +117,8 @@ def parseDSSP(dssp_txt='',show_seq=True,show_ss=8,show_sarst=True):
             PHI=float(line[103:109])
             PSI=float(line[109:115])
             if PHI!=360 and PSI!=360:
+                PHI-=(PHI==180)*360
+                PSI+=(PSI==-180)*360
                 SARST_CODE=sarst_matrix[int((180-PSI)/10)][int((180+PHI)/10)]
             else:
                 SARST_CODE='X'
