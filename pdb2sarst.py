@@ -6,7 +6,7 @@ options:
     -show_seq={true,false}   
         whether to show sequence
 
-    -show_ss={8,3,0}    
+    -show_ss={8,3,1,0}    
         whether to show secondary structure.
         8 - DSSP 8 state secondary structure assignment
         3 - 3 state secondary structure assignment
@@ -16,6 +16,9 @@ options:
 
     -show_sarst={true,false}
         whether to calculate ramachandran code (SARST code)
+
+    -show_chain={true,false}
+        whether to show chain ID in sequence name
 '''
 import sys,os
 import subprocess
@@ -79,9 +82,16 @@ def runDSSP(infile="pdb.pdb",dssp_exe="dssp"):
     return stdout
 
 def parseDSSP(dssp_txt='',show_seq=True,show_ss=8,show_sarst=True):
-    '''parse cleaned dssp output. return a dict whose key is chain ID and value
-    is a list of [sequence,ss,sarst]'''
+    '''parse cleaned dssp output. 
+    output:
+        dssp_dict: a dict whose key is chain ID and value
+                   is a list of [sequence,ss,sarst]
+        ss_type_dict: a dict whose key is chain ID and value is fold type
+                   0 - random coil, 1 - all alpha
+                   2 - all beta,    3 - alpha+beta alpha/beta
+    '''
     dssp_dict=dict()
+    ss_type_dict=dict()
     for line in dssp_txt.splitlines():
         if len(line)<115:
             continue
@@ -95,8 +105,8 @@ def parseDSSP(dssp_txt='',show_seq=True,show_ss=8,show_sarst=True):
         if show_seq:
             dssp_dict[chainID][0]+=AA
 
+        SS=line[16].replace(' ','C')
         if show_ss:
-            SS=line[16].replace(' ','C')
             if show_ss<=3:
                 SS=SS.replace('I','H').replace('G','H'
                     ).replace('B','E'
@@ -111,12 +121,19 @@ def parseDSSP(dssp_txt='',show_seq=True,show_ss=8,show_sarst=True):
             else:
                 SARST_CODE='X'
             dssp_dict[chainID][-1]+=SARST_CODE
-    return dssp_dict
+    for chainID in dssp_dict:
+        ss_type_dict[chainID]=0
+        if set('HIG').intersection(dssp_dict[chainID][show_seq]):
+            ss_type_dict[chainID]+=1
+        if set('BE').intersection(dssp_dict[chainID][show_seq]):
+            ss_type_dict[chainID]+=2
+    return dssp_dict,ss_type_dict
 
 if __name__=="__main__":
     show_seq=True
     show_ss=8
     show_sarst=True
+    show_chain=True
 
     argv=[]
     for arg in sys.argv[1:]:
@@ -126,6 +143,8 @@ if __name__=="__main__":
             show_ss=int(arg[len("-show_ss="):])
         elif arg.startswith('-show_sarst='):
             show_sarst=(arg[len("-show_sarst="):].lower()=="true")
+        elif arg.startswith('-show_chain='):
+            show_chain=(arg[len("-show_chain="):].lower()=="true")
         elif arg.startswith('-'):
             sys.stderr.write("ERROR! Unknown argument %s\n"%arg)
             exit()
@@ -140,18 +159,17 @@ if __name__=="__main__":
     dssp_exe=detectDSSP()
     for infile in argv:
         dssp_txt=runDSSP(infile,dssp_exe)
-        dssp_dict=parseDSSP(dssp_txt,show_seq,show_ss,show_sarst)
+        dssp_dict,ss_type_dict=parseDSSP(dssp_txt,show_seq,show_ss,show_sarst)
 
         PDBID=os.path.basename(infile).split('.')[0]
         txt=''
         for chainID in dssp_dict:
+            header='>'+PDBID+(':'+chainID)*show_chain
             if show_ss!=1:
-                txt+='>'+PDBID+':'+chainID+'\n'+''.join(
+                txt+=header+'\n'+''.join(
                     [line+'\n' for line in dssp_dict[chainID]])
             else:
-                # 0 - random coil, 1 - all alpha, 2 - all beta, 3 - alpha beta
-                ss_type=1*('H' in dssp_dict[chainID][show_seq])+ \
-                        2*('E' in dssp_dict[chainID][show_seq])
-                txt+='>'+PDBID+':'+chainID+'\t%d'%ss_type+'\n'+''.join(
-                    [line+'\n' for line in dssp_dict[chainID][:show_seq]+dssp_dict[chainID][show_seq+1:]])
+                txt+=header+'\t%d'%ss_type_dict[chainID]+'\n'+''.join(
+                    [line+'\n' for line in \
+                    dssp_dict[chainID][:show_seq]+dssp_dict[chainID][show_seq+1:]])
         sys.stdout.write(txt)
