@@ -7,7 +7,8 @@ fixMSE.py infile.pdb outfile.pdb
 
 fixMSE.py -clean=true infile.pdb outfile.pdb
     In additional to MSE conversion, only preserve "ATOM" for 20 standard 
-    amino acid and "TER".
+    amino acid and "TER". Keey only one out of all alternatively located 
+    sidechains.
 '''
 import sys,os
 
@@ -85,7 +86,7 @@ def fixMSE_txt(txt='',aa3to1=code_MSE,clean=False):
                 fix_txt.append(line)
                 continue
             else:
-                if line.startswith("ENDMDL"): # only use return model 1
+                if line.startswith("ENDMDL"): # only return model 1
                     break
             continue
         resn=line[17:20]
@@ -96,6 +97,13 @@ def fixMSE_txt(txt='',aa3to1=code_MSE,clean=False):
             line=line[:12]+" SD"+line[15:]
             if len(line)>=78 and line[76:78]=="SE":
                 line=line[:76]+' S'+line[78:]
+
+        # clean alternative location identifier
+        if clean==True and not line[16] in "A ":
+            continue
+        elif line[16]=="A":
+            line=line[:16]+' '+line[17:]
+
         if clean==False or line[17:20] in standard_amino_acid:
             fix_txt.append(line)
     return '\n'.join(fix_txt)+'\n'
