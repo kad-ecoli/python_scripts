@@ -6,7 +6,7 @@ options:
     -show_seq={true,false}   
         whether to show sequence
 
-    -show_ss={8,3,0}    
+    -show_ss={8,3,1,0}    
         whether to show secondary structure.
         8 - DSSP 8 state secondary structure assignment
         3 - 3 state secondary structure assignment
@@ -16,9 +16,24 @@ options:
 
     -show_sarst={true,false}
         whether to calculate ramachandran code (SARST code)
+
+    -show_chain={true,false}
+        whether to show chain ID in sequence name
+
+    -pulchra_path=./pulchra
+        path to pulchra executable. By default it is guessed by
+        location of this script. pulchra is used to construct full atom
+        model from backbone model when the input structure contains too
+        few atoms.
+
+    -dssp_path=./dssp
+        path to DSSP executable. By default it is guessed by
+        location of this script
 '''
 import sys,os
 import subprocess
+import random
+import shutil
 
 sarst_matrix=[
     "SSSIIIIQQQQQQQQZZZZZZZRRYYYYYYYYSSSS",
@@ -59,29 +74,98 @@ sarst_matrix=[
     "SSSSIIQQQQQQQQQZZZZZZZRRRYYYYYYYSSSS",
 ]
 
-def detectDSSP():
+def detectDSSP(dssp_path="dssp"):
     '''auto detect the location of dssp executable'''
-    dssp_exe="dssp"
-    bindir=os.path.dirname(os.path.abspath(__file__))
-    if os.path.isfile(os.path.join(bindir,"dssp")):
-        dssp_exe=os.path.join(bindir,"dssp")
-    elif os.path.isfile(os.path.join(bindir,"mkdssp")):
-        dssp_exe=os.path.join(bindir,"mkdssp")
-    elif os.path.isfile(os.path.join(bindir,"dsspcmbi")):
-        dssp_exe=os.path.join(bindir,"dsspcmbi")
-    return dssp_exe
+    if not dssp_path:
+        dssp_path="dssp"
+        bindir=os.path.dirname(os.path.abspath(__file__))
+        if os.path.isfile(os.path.join(bindir,"dssp")):
+            dssp_path=os.path.join(bindir,"dssp")
+        elif os.path.isfile(os.path.join(bindir,"mkdssp")):
+            dssp_path=os.path.join(bindir,"mkdssp")
+        elif os.path.isfile(os.path.join(bindir,"dsspcmbi")):
+            dssp_path=os.path.join(bindir,"dsspcmbi")
+    if os.path.isfile(dssp_path):
+        dssp_path=os.path.abspath(dssp_path)
+    return dssp_path
 
-def runDSSP(infile="pdb.pdb",dssp_exe="dssp"):
-    '''run dssp executable "dssp_exe" on PDB file "infile" '''
-    cmd=dssp_exe+" -i "+infile+"|grep -v '\.$'|grep -vP '\s+#'"
-    p=subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE)
+def detectPULCHRA(pulchra_path="pulchra"):
+    '''auto detect the location of pulchra executable'''
+    if not pulchra_path:
+        pulchra_path="pulchra"
+        bindir=os.path.dirname(os.path.abspath(__file__))
+        if os.path.isfile(os.path.join(bindir,"pulchra")):
+            pulchra_path=os.path.join(bindir,"pulchra")
+    if os.path.isfile(pulchra_path):
+        pulchra_path=os.path.abspath(pulchra_path)
+    return pulchra_path
+
+def runDSSP(infile="pdb.pdb",dssp_path="dssp",pulchra_path="pulchra"):
+    '''run dssp executable "dssp_path" on PDB file "infile".
+    if infile is C-alpha trace, use pulchra executable "pulchra_path" to
+    reconstruct full atom structure and run dssp.
+    '''
+    cmd=dssp_path+" -i "+infile+"|grep -v '\.$'|grep -vP '\s+#'"
+    p=subprocess.Popen(cmd,shell=True,
+        stdout=subprocess.PIPE,stderr=subprocess.PIPE)
     stdout,stderr=p.communicate()
+    if stderr.startswith("DSSP could not be created due to an error:"):
+        # extract chain ID
+        chainID=' '
+        fp=open(infile,'rU')
+        for line in fp:
+            if line.startswith("ATOM  ") and line[13:15]=="CA":
+                chainID=line[21]
+                break
+
+        tmp_dir="/tmp/"+os.getenv("USER")+"/dssp2sarst"+str(random.randint(
+            1000,9999))+os.path.basename(infile).split('.')[0]+'/'
+        if not os.path.isdir(tmp_dir):
+            os.makedirs(tmp_dir)
+        tmp_pdb=tmp_dir+'xxxx.pdb'
+        shutil.copy(infile,tmp_pdb)
+        pul_cmd=' '.join(['cd',tmp_dir,';',pulchra_path,'-epc xxxx.pdb'])
+
+        subprocess.Popen(pul_cmd, stdout=subprocess.PIPE, shell=True,
+                ).communicate()
+        if os.path.isfile(tmp_dir+"xxxx.rebuilt.pdb"):
+            infile=tmp_dir+"xxxx.rebuilt.pdb"
+        elif os.path.isfile(tmp_dir+"rebuilt_xxxx.pdb"):
+            infile=tmp_dir+"rebuilt_xxxx.pdb"
+        elif os.path.isfile(tmp_dir+"pul_xxxx.pdb"):
+            infile=tmp_dir+"pul_xxxx.pdb"
+        else:
+            sys.stderr.write(stderr)
+            shutil.rmtree(tmp_dir)
+            return stdout
+
+        txt=''
+        fp=open(infile,'rU')
+        for line in fp:
+            if line.startswith('ATOM') or line.startswith('HETATM'):
+                txt+=line[:21]+chainID+line[22:54]+"  1.00  0.00           "+line[13]+"  \n"
+        fp.close()
+        fp=open(infile,'w')
+        fp.write(txt)
+        fp.close()
+
+        cmd=dssp_path+" -i "+infile+"|grep -v '\.$'|grep -vP '\s+#'"
+        p=subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE)
+        stdout,stderr=p.communicate()
+        shutil.rmtree(tmp_dir)
     return stdout
 
 def parseDSSP(dssp_txt='',show_seq=True,show_ss=8,show_sarst=True):
-    '''parse cleaned dssp output. return a dict whose key is chain ID and value
-    is a list of [sequence,ss,sarst]'''
+    '''parse cleaned dssp output. 
+    output:
+        dssp_dict: a dict whose key is chain ID and value
+                   is a list of [sequence,ss,sarst]
+        ss_type_dict: a dict whose key is chain ID and value is fold type
+                   0 - random coil, 1 - all alpha
+                   2 - all beta,    3 - alpha+beta alpha/beta
+    '''
     dssp_dict=dict()
+    ss_type_dict=dict()
     for line in dssp_txt.splitlines():
         if len(line)<115:
             continue
@@ -95,8 +179,8 @@ def parseDSSP(dssp_txt='',show_seq=True,show_ss=8,show_sarst=True):
         if show_seq:
             dssp_dict[chainID][0]+=AA
 
+        SS=line[16].replace(' ','C')
         if show_ss:
-            SS=line[16].replace(' ','C')
             if show_ss<=3:
                 SS=SS.replace('I','H').replace('G','H'
                     ).replace('B','E'
@@ -107,16 +191,28 @@ def parseDSSP(dssp_txt='',show_seq=True,show_ss=8,show_sarst=True):
             PHI=float(line[103:109])
             PSI=float(line[109:115])
             if PHI!=360 and PSI!=360:
+                PHI-=(PHI==180)*360
+                PSI+=(PSI==-180)*360
                 SARST_CODE=sarst_matrix[int((180-PSI)/10)][int((180+PHI)/10)]
             else:
                 SARST_CODE='X'
             dssp_dict[chainID][-1]+=SARST_CODE
-    return dssp_dict
+    for chainID in dssp_dict:
+        ss_type_dict[chainID]=0
+        if show_ss:
+            if set('HIG').intersection(dssp_dict[chainID][show_seq]):
+                ss_type_dict[chainID]+=1
+            if set('BE').intersection(dssp_dict[chainID][show_seq]):
+                ss_type_dict[chainID]+=2
+    return dssp_dict,ss_type_dict
 
 if __name__=="__main__":
     show_seq=True
     show_ss=8
     show_sarst=True
+    show_chain=True
+    dssp_path=''
+    pulchra_path=''
 
     argv=[]
     for arg in sys.argv[1:]:
@@ -126,6 +222,12 @@ if __name__=="__main__":
             show_ss=int(arg[len("-show_ss="):])
         elif arg.startswith('-show_sarst='):
             show_sarst=(arg[len("-show_sarst="):].lower()=="true")
+        elif arg.startswith('-show_chain='):
+            show_chain=(arg[len("-show_chain="):].lower()=="true")
+        elif arg.startswith('-dssp_path='):
+            dssp_path=arg[len("-dssp_path="):]
+        elif arg.startswith('-pulchra_path='):
+            pulchra_path=arg[len("-pulchra_path="):]
         elif arg.startswith('-'):
             sys.stderr.write("ERROR! Unknown argument %s\n"%arg)
             exit()
@@ -137,21 +239,24 @@ if __name__=="__main__":
         sys.stderr.write(docstring)
         exit()
 
-    dssp_exe=detectDSSP()
+    if not dssp_path:
+        dssp_path=detectDSSP(dssp_path)
+    if not pulchra_path:
+        pulchra_path=detectPULCHRA(pulchra_path)
+
     for infile in argv:
-        dssp_txt=runDSSP(infile,dssp_exe)
-        dssp_dict=parseDSSP(dssp_txt,show_seq,show_ss,show_sarst)
+        dssp_txt=runDSSP(infile,dssp_path,pulchra_path)
+        dssp_dict,ss_type_dict=parseDSSP(dssp_txt,show_seq,show_ss,show_sarst)
 
         PDBID=os.path.basename(infile).split('.')[0]
         txt=''
         for chainID in dssp_dict:
+            header='>'+PDBID+(':'+chainID)*show_chain
             if show_ss!=1:
-                txt+='>'+PDBID+':'+chainID+'\n'+''.join(
+                txt+=header+'\n'+''.join(
                     [line+'\n' for line in dssp_dict[chainID]])
             else:
-                # 0 - random coil, 1 - all alpha, 2 - all beta, 3 - alpha beta
-                ss_type=1*('H' in dssp_dict[chainID][show_seq])+ \
-                        2*('E' in dssp_dict[chainID][show_seq])
-                txt+='>'+PDBID+':'+chainID+'\t%d'%ss_type+'\n'+''.join(
-                    [line+'\n' for line in dssp_dict[chainID][:show_seq]+dssp_dict[chainID][show_seq+1:]])
+                txt+=header+'\t%d'%ss_type_dict[chainID]+'\n'+''.join(
+                    [line+'\n' for line in \
+                    dssp_dict[chainID][:show_seq]+dssp_dict[chainID][show_seq+1:]])
         sys.stdout.write(txt)
