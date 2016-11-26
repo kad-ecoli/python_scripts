@@ -7,26 +7,33 @@ fetch 4k5y
 fetch 4k5yA
     Download PDB 4k5y chain A to 4k5yA.pdb
 
+fetch 3pjpB2
+    Download PDB 4k5y chain A domain 1 to 3pjpB2.pdb
+
 fetch P34998
     Download all PDB associated with uniprot ID P34998
 
 fetch PF00406
     Download all PDB associated with pfam ID PF00406
 
-fetch -outfmt=fasta 4k5y
-    Print FASTA sequence for 4k5y
-
-fetch -outfmt=fasta P34998
-    Print FASTA sequence for P34998
-
-fetch -outfmt=list P34998
-    Print a list of available PDB for P34998
-
-fetch -outfmt=list PF00406
-    Print a list of available PDB for P34998
-
-fetch -include_model=true 163D
-    Download obsolete PDB such as theoretical models
+option:
+    -outfmt={pdb,fasta,list} output format
+        pdb: pdb coordinate
+        fasta: fasta sequence for PDB or for uniprot accession
+        list: list of available PDB for uniprot accession
+    -include_model={false,true} output format
+        whether to download obsolete PDB such as theoretical models
+    -execpath=./domainparser2.LINUX
+        path to DomainParser executable. By default it is guessed by 
+        location of this script
+    -dssp_path=./dssp
+        path to DSSP executable. By default it is guessed by
+        location of this script
+    -pulchra_path=./pulchra
+        path to pulchra executable. By default it is guessed by 
+        location of this script. pulchra is used to construct full atom
+        model from backbone model when the input structure contains too
+        few atoms.
 '''
 import sys,os
 import re
@@ -35,6 +42,8 @@ import tarfile
 import urllib
 import urllib2
 import shutil
+
+from DomainParser import DomainParser
 
 pdb_mirror="ftp://ftp.wwpdb.org/pub/pdb/data/structures/all/pdb/pdb"
 pdb_bundle_mirror="ftp://ftp.wwpdb.org/pub/pdb/compatible/pdb_bundle/"
@@ -313,7 +322,8 @@ def obsolete_chain2supersede_chain(PDB_chain):
         return ''
     return PDBid_supersede+PDB_chain[4:]
 
-def fetch_chain(PDB_chain,include_model=False):
+def fetch_chain(PDB_chain,include_model=False,
+    execpath="domainparser2.LINUX",dssp_path="dssp",pulchra_path="pulchra"):
     '''download PDB and split into specific chain
     include_model - whether download obsolete PDB such as theoretical model
     '''
@@ -323,10 +333,12 @@ def fetch_chain(PDB_chain,include_model=False):
     if not PDB_file[:4]==PDB_chain[:4]: # PDB_chain was obsolete
         PDB_chain=obsolete_chain2supersede_chain(PDB_chain)
 
-    PDB_chain_file_list=extract_chain(PDB_file,chainID_list=PDB_chain[4:])
+    PDB_chain_file_list=extract_chain(PDB_file,PDB_chain[4:],
+        execpath,dssp_path,pulchra_path)
     return PDB_chain_file_list
 
-def extract_chain(PDB_file,chainID_list=[]):
+def extract_chain(PDB_file,chainID_list=[],
+    execpath="domainparser2.LINUX",dssp_path="dssp",pulchra_path="pulchra"):
     '''split PDB_file into PDB files containing individual chainID'''
     if isinstance(chainID_list,str):
         chainID_list=[chainID_list]
@@ -353,6 +365,13 @@ def extract_chain(PDB_file,chainID_list=[]):
                     continue # CONECT is after all ATOM & HETATM
                 PDB_txt+=line+'\n'
         if not atom_serial_list:
+            if re.match("^\w+?(\d+)$",chainID):
+                chainID,domainID=re.findall("^(\w+?)(\d+)$",chainID)[0]
+                tmp_PDB_chain_file_list=extract_chain(PDB_file,[chainID])
+                if tmp_PDB_chain_file_list:
+                    log=DomainParser(tmp_PDB_chain_file_list[0],
+                        execpath,dssp_path,pulchra_path)
+                    continue
             sys.stderr.write("ERROR! no chain %s in %s\n"%(
                 chainID,PDB_file.split('.')[0]))
             PDB_chain_file_list=PDB_chain_file_list[:-1]
@@ -442,16 +461,19 @@ def extract_uniprot(PDB_chain_file,accession,PERMISSIVE=True):
     fp.close()
     return PDB_accession_file
 
-def fetch_pfam(pfamID):
+def fetch_pfam(pfamID,
+    execpath="domainparser2.LINUX",dssp_path="dssp",pulchra_path="pulchra"):
     '''download all available pdb for a pfam accession'''
     pdbe_list=fetch_pdb_list_for_pfam(pfamID)
     PDB_chain_file_list=[]
     for pdbe in pdbe_list:
         PDB_chain=pdbe[0].lower()+pdbe[1]
-        PDB_chain_file_list+=fetch_chain(PDB_chain)
+        PDB_chain_file_list+=fetch_chain(PDB_chain,
+            execpath,dssp_path,pulchra_path)
     return PDB_chain_file_list
 
-def fetch_uniprot(accession,all_chain=False):
+def fetch_uniprot(accession,all_chain=False,
+    execpath="domainparser2.LINUX",dssp_path="dssp",pulchra_path="pulchra"):
     '''download all available pdb for a uniprot accession
     all_chain - False: (default)only the first chain if multiple 
                        chains are present in one PDB 
@@ -463,10 +485,12 @@ def fetch_uniprot(accession,all_chain=False):
         if all_chain:
             for chain in pdbe[1].split('/'):
                 PDB_chain=pdbe[0].lower()+chain
-                PDB_chain_file_list+=fetch_chain(PDB_chain)
+                PDB_chain_file_list+=fetch_chain(PDB_chain,
+                    execpath,dssp_path,pulchra_path)
         else:
                 PDB_chain=pdbe[0].lower()+pdbe[1].split('/')[0]
-                PDB_chain_file_list+=fetch_chain(PDB_chain)
+                PDB_chain_file_list+=fetch_chain(PDB_chain,
+                    execpath,dssp_path,pulchra_path)
     PDB_accession_file_list=[extract_uniprot(PDB_chain_file,accession
         ) for PDB_chain_file in PDB_chain_file_list]
     return PDB_accession_file_list
@@ -495,32 +519,49 @@ def fetch_pdb_chain_sequence(PDB_chain):
     return txt
 
 if __name__=="__main__":
-    if len(sys.argv)<2:
-        sys.stderr.write(docstring)
-        exit()
-    
     outfmt="pdb"
     include_model=False
+    execpath=os.path.join(os.path.dirname(os.path.abspath(__file__)),
+        "domainparser2.LINUX")
+    dssp_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),
+        "dssp")
+    pulchra_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),
+        "pulchra")
+    
+    argv=[]
     for arg in sys.argv[1:]:
         if arg.startswith("-outfmt="):
             outfmt=arg[len("-outfmt="):]
         elif arg.startswith("-include_model="):
             include_model=(arg[len("-include_model="):].lower()=="true")
+        elif arg.startswith("-execpath="):
+            execpath=os.path.abspath(arg[len("-execpath="):])
+        elif arg.startswith("-dssp_path="):
+            dssp_path=os.path.abspath(arg[len("-dssp_path="):])
+        elif arg.startswith("-pulchra_path="):
+            log=os.path.abspath(arg[len("-pulchra_path="):])
         elif arg.startswith("-"):
             sys.stderr.write("ERROR! Unknown argument %s\n"%arg)
             exit()
+        else:
+            argv.append(arg)
+    if len(argv)<1:
+        sys.stderr.write(docstring)
+        exit()
 
-    argv=[a for a in sys.argv[1:] if not a.startswith('-')]
     if outfmt=="pdb":
         for arg in argv:
             if pdb_pattern.match(arg):
                 print fetch(arg,include_model)
             elif pdb_chain_pattern.match(arg):
-                print '\n'.join(fetch_chain(arg,include_model))
+                print '\n'.join(fetch_chain(arg,include_model,
+                    execpath,dssp_path,pulchra_path))
             elif accession_pattern.match(arg) or entry_pattern.match(arg):
-                print '\n'.join(fetch_uniprot(arg))
+                print '\n'.join(fetch_uniprot(arg,
+                    execpath,dssp_path,pulchra_path))
             elif PFAM_pattern.match(arg):
-                print '\n'.join(fetch_pfam(arg))
+                print '\n'.join(fetch_pfam(arg,
+                    execpath,dssp_path,pulchra_path))
     elif outfmt=="list":
         for arg in argv:
             if accession_pattern.match(arg) or entry_pattern.match(arg):
