@@ -272,6 +272,9 @@ def fetch(PDBid,include_model=False):
 
     if not PDB_gz_file and include_model: # download from rcsb website
         PDB_gz_file=wget(rcsb_pdb_mirror+PDBid.upper()+".pdb.gz",PDB_gz_file)
+        if not os.path.getsize(PDB_gz_file):
+            os.remove(PDB_gz_file)
+            PDB_gz_file=''
 
     if not PDB_gz_file: # download best effort/minimal PDB bundle
         tarball_name=fetch_bundle(PDBid,no_err=True)
