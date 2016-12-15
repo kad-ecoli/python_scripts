@@ -18,7 +18,6 @@ Pairwise sequence alignment by standard Needleman-Wunsch algorithm
     NWalign GKDGL F.pdb 5     (align Sequence 1 by keyboard and 2 in pdb)
 '''
 import sys
-from fixMSE import code_with_modified_residues as aa
 gap_open=-11 # gap gapopen
 gap_extn=-1 # gap gapext
 Blosum62Matrix=[
@@ -57,19 +56,10 @@ def readFastaOrRawSequence(infile="F1.fasta"):
 
 def readPDB(infile="F1.pdb"):
     '''read a sequence from a PDB file'''
-    br=open(infile,'rU').read()
-    seq=''
-    for line in br.splitlines():
-        if line.startswith('END') or line.startswith('TER'):
-            break
-        elif line.startswith('ATOM ') and line[13:15]=="CA":
-            seq+=NameMap(line[17:20])
-    return seq
-
-def NameMap(residue="ALA"):
-    '''Map a three-letter abbreviation to a single-letter code.'''
-    residue=residue.upper()
-    return aa[residue] if residue in aa else 'X'
+    from pdb2fasta import pdb2seq
+    header_list,sequence_list=pdb2seq(infile,
+        PERMISSIVE="MSE",outfmt="PDB",allowX=True)
+    return sequence_list[0]
 
 def empty_matrix(N_rows, N_cols, fill=0):
     '''Return a matrix (list of lists) which has `N_rows` rows and `N_cols`
@@ -267,6 +257,7 @@ def NeedlemanWunsch(f1="GKDGL",f2="EVADELVSE", imut=Blosum62Matrix,
     # sequenceA (aligned f1); sequenceB (aligned f2)
     sequenceA,sequenceB=trace_back_gotoh(idir,jpV,jpH,f1,f2)
     print_alignment(sequenceA,sequenceB)
+    return sequenceA,sequenceB
 
 if __name__=="__main__":
     if len(sys.argv)<2:
