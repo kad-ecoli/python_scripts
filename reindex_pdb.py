@@ -76,8 +76,7 @@ def reindex_pdb_by_sequence(sequence_ref,PDBtxt):
     only ATOM or MSE will be parsed
     '''
     #### convert PDB to fasta ####
-    from pdb2fasta import pdbtxt2seq,code_standard
-    code_standard["MSE"]='M'
+    from pdb2fasta import pdbtxt2seq
     header_list,sequence_list=pdbtxt2seq(PDBtxt,PERMISSIVE="MSE",allowX=True)
     sequence_pdb=sequence_list[0]
 
