@@ -16,6 +16,9 @@ fetch P34998
 fetch PF00406
     Download all PDB associated with pfam ID PF00406
 
+fetch d10mha_
+    Download SCOPe domain structure d10mha_ to d10mha_.pdb
+
 option:
     -outfmt={pdb,fasta,list} output format
         pdb: pdb coordinate
@@ -43,8 +46,6 @@ import urllib
 import urllib2
 import shutil
 
-from DomainParser import DomainParser
-
 pdb_mirror="ftp://ftp.wwpdb.org/pub/pdb/data/structures/all/pdb/pdb"
 pdb_bundle_mirror="ftp://ftp.wwpdb.org/pub/pdb/compatible/pdb_bundle/"
 uniprot_mirror="http://www.uniprot.org/uniprot/"
@@ -54,6 +55,7 @@ rcsb_pdb_mirror="http://www.rcsb.org/pdb/files/"
 pdb_pfam_mapping_mirror="http://www.rcsb.org/pdb/rest/hmmer?file=hmmer_pdb_all.txt"
 obsolete_mirror="ftp://ftp.wwpdb.org/pub/pdb/data/status/obsolete.dat"
 large_split_mirror="ftp://ftp.wwpdb.org/pub/pdb/compatible/pdb_bundle/large_split_mapping.tsv"
+scop_mirror="http://scop.berkeley.edu/downloads/pdbstyle"
 
 pdb_pattern=re.compile("^\d\w{3}$")
 pdb_chain_pattern=re.compile("^\d\w{4,5}$")
@@ -65,6 +67,7 @@ PDBe_entry_pattern=re.compile("www\.ebi\.ac\.uk\/pdbe\-srv\/view/entry/(\d\w{3})
 DBREF_pattern=re.compile("DBREF[\d]{0,1}\s{1,2}\d\w{3}\s\w{0,1}\s+(\d+)\s+(\d+)\s+UNP\s+(\w+)")
 PFAM_pattern=re.compile("[Pp][Ff]\d{5}")
 pdb_bundle_pattern=re.compile("\d\w{3}\-pdb\-bundle\d+\.pdb")
+scop_pattern=re.compile("^d\d[0-9a-z]{3}[_0-9a-zA-Z]{2,}$")
 
 chainID_column={ # column to store chainID, 0 for no chainID
     "DBREF":12, "SEQADV":16, "SEQRES":11, "MODRES":16,# Primary Structure
@@ -263,6 +266,17 @@ def obsolete2supersede(PDBid):
         return obsolete_dict[PDBid][0]
     return ''
 
+def fetch_scope(PDBid):
+    '''download SCOPe structure PDBid'''
+    fp=urllib2.urlopen(scop_mirror)
+    txt=fp.read()
+    fp.close()
+    scop_version=sorted(set(re.findall("pdbstyle\-\d+\.\d+",txt)))[-1]
+    url='/'.join([scop_mirror,scop_version,PDBid[2:4],PDBid+".ent"])
+    PDB_file=PDBid+".pdb"
+    wget(url,PDB_file)
+    return PDB_file
+
 def fetch(PDBid,include_model=False):
     '''download PDBid.pdb if standard PDB format is present
     download superseding PDB if the provided PDBid is obsolete
@@ -327,6 +341,7 @@ def fetch_chain(PDB_chain,include_model=False,
     '''download PDB and split into specific chain
     include_model - whether download obsolete PDB such as theoretical model
     '''
+    PDB_chain=PDB_chain[:4].lower()+PDB_chain[4:]
     PDB_file=fetch(PDB_chain[:4],include_model)
     if not PDB_file:
         return ''
@@ -369,6 +384,7 @@ def extract_chain(PDB_file,chainID_list=[],
                 chainID,domainID=re.findall("^(\w+?)(\d+)$",chainID)[0]
                 tmp_PDB_chain_file_list=extract_chain(PDB_file,[chainID])
                 if tmp_PDB_chain_file_list:
+                    from DomainParser import DomainParser
                     log=DomainParser(tmp_PDB_chain_file_list[0],
                         execpath,dssp_path,pulchra_path)
                     continue
@@ -553,6 +569,8 @@ if __name__=="__main__":
         for arg in argv:
             if pdb_pattern.match(arg):
                 print fetch(arg,include_model)
+            elif scop_pattern.match(arg):
+                print fetch_scope(arg)
             elif pdb_chain_pattern.match(arg):
                 print '\n'.join(fetch_chain(arg,include_model,
                     execpath,dssp_path,pulchra_path))
