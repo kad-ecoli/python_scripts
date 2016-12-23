@@ -94,6 +94,8 @@ def pdb2seq(infile="pdb.pdb", PERMISSIVE="MSE", outfmt="PDB",allowX=True):
     '''
     if infile.endswith(".tar.gz"): # best effort/minimum PDB bundle
         return pdbbundle2seq(infile,PERMISSIVE,outfmt,allowX)
+    elif infile.endswith(".cif") or infile.endswith(".cif.gz"): # PDBx/mmCIF
+        return mmCIF2seq(infile,PERMISSIVE,outfmt,allowX)
     elif infile.endswith(".gz"):
         fp=gzip.open(infile,'rU')
     else:
@@ -101,6 +103,74 @@ def pdb2seq(infile="pdb.pdb", PERMISSIVE="MSE", outfmt="PDB",allowX=True):
     txt=fp.read()
     fp.close()
     return pdbtxt2seq(txt,infile,PERMISSIVE,outfmt,allowX)
+
+def mmCIF2seq(infile="pdb.cif", PERMISSIVE="MSE",outfmt="PDB",
+    allowX=True):
+    ''' Convert mmCIF/PDBx format file "infile" '''
+    if infile.endswith(".gz"):
+        fp=gzip.open(infile,'rU')
+    else:
+        fp=open(infile,'rU')
+    txt=fp.read()
+    fp.close()
+
+    aa3to1=code_with_modified_residues
+
+    chain_dict=dict() # Each chain will be one keu
+    for line in txt.splitlines():
+        if not line.startswith("ATOM") or line.startswith("HETATM"):
+            continue
+        
+        line=line.split()
+        if len(line)<26:
+            continue
+
+        group_PDB,atom_num,type_symbol,label_atom_id,label_alt_id, \
+        label_comp_id,label_asym_id,label_entity_id,label_seq_id,  \
+        pdbx_PDB_ins_code,Cartn_x,Cartn_y,Cartn_z,occupancy,       \
+        B_iso_or_equiv,Cartn_x_esd,Cartn_y_esd,Cartn_z_esd,        \
+        occupancy_esd,B_iso_or_equiv_esd,pdbx_formal_charge,       \
+        auth_seq_id,auth_comp_id,auth_asym_id,auth_atom_id,        \
+        pdbx_PDB_model_num=line
+
+        if int(pdbx_PDB_model_num)>1:
+            break # just parse the first model
+        if label_atom_id!="CA" or not label_alt_id in {'.','A'}: # just CA
+            continue
+
+        if PERMISSIVE=="ATOM" and group_PDB!="ATOM":
+            continue
+        elif PERMISSIVE=="MSE" and group_PDB!="ATOM" and label_comp_id!="MSE":
+            continue
+
+        aa=aa3to1[label_comp_id] if label_comp_id in aa3to1 else 'X'
+        if not allowX and aa=='X':
+            continue
+
+        if not label_asym_id in chain_dict:
+            chain_dict[label_asym_id]=[]
+
+        residue_tuple=(label_seq_id,aa)
+        if not residue_tuple in chain_dict[label_asym_id]:
+            chain_dict[label_asym_id].append(residue_tuple)
+
+    header_list=[]
+    sequence_list=[]
+    PDBID=os.path.basename(infile).split('.')[0]
+    for chain_id in sorted(chain_dict):
+        res_num_list,sequence=zip(*chain_dict[chain_id])
+        header_list.append(PDBID+':'+chain_id)
+        sequence_list.append(''.join(sequence))
+
+    if outfmt=="COFACTOR":
+        if len(sequence_list)>1:
+            sys.stderr.write("WARNING! Multichain PDB %s\n"%infile)
+        sequence=''.join(sequence_list)
+        header=PDBID+'\t'+str(len(sequence))
+        sequence=textwrap.fill(''.join(sequence),60)
+        header_list=[header]
+        sequence_list=[sequence]
+    return header_list,sequence_list
 
 def pdbtxt2seq(txt='',infile='pdb.pdb',PERMISSIVE="MSE",outfmt="PDB",
     allowX=True):
