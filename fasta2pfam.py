@@ -1,21 +1,42 @@
 #!/usr/bin/env python
-'''Convert Fasta format to Pfam format'''
-import Bio.SeqIO # parse FASTA file
-import sys
-if len(sys.argv)<2:
-    print >>sys.stderr,'''fasta2pfam [options] alignment.fasta
+docstring='''fasta2pfam [options] alignment.fasta
 Convert Fasta format file to Pfam format file
+
 Options:
     -seqnamelen=10 maximum sequence name length
 '''
-    exit()
+import sys
 
-entry_list=[e for e in Bio.SeqIO.parse(sys.argv[-1],"fasta")]
+def fasta2pfam(fasta_txt="seq.fasta",seqnamelen=0):
+    '''read fasta text "fasta_txt". return text in pfam format
+    seqnamelen - maximum sequence name length.
+    '''
+    pfam_txt=''
+    for block in fasta_txt.split('>'):
+        if not block.strip():
+            continue
+        header=block.split()[0]
+        sequence=''.join(block.splitlines()[1:])
+        if seqnamelen:
+            header=header[:seqnamelen]
+        pfam_txt+=header+' '+sequence+'\n'
+    return pfam_txt
 
-seqnamelen=[int(a.lstrip("-seqnamelen=")) for a in sys.argv[1:-1] \
-    if a.startswith("-seqnamelen=")]
-seqnamelen=seqnamelen[0] if seqnamelen else max([len(e.id) for e in entry_list])
+if __name__=="__main__":
+    seqnamelen=0
+    argv=[]
+    for arg in sys.argv[1:]:
+        if arg.startswith("-seqnamelen="):
+            seqnamelen=int(arg[len("-seqnamelen="):])
+        else:
+            argv.append(arg)
 
-for e in entry_list:
-    print e.id[:seqnamelen].ljust(seqnamelen)+' '+str(e.seq)
-    
+    if len(argv)<1:
+        sys.stderr.write(docstring)
+        exit()
+
+    for arg in argv:
+        fp=open(arg,'rU')
+        fasta_txt=fp.read()
+        fp.close()
+        sys.stdout.write(fasta2pfam(fasta_txt))
