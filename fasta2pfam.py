@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 docstring='''fasta2pfam [options] alignment.fasta
-Convert Fasta format file to Pfam format file
+    Convert Fasta format file to Pfam format file
 
 Options:
     -seqnamelen=10 maximum sequence name length
