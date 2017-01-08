@@ -614,8 +614,12 @@ def fetch(arg,outfmt=''):
 if __name__=="__main__":
     outfmt='' # guess from file extension
     include_model=False
-    execpath=os.path.join(os.path.dirname(os.path.abspath(__file__)),
-        "domainparser2.LINUX")
+    try:
+        from DomainParser import locate_DomainParser
+        execpath=locate_DomainParser()
+    except ImportError:
+        execpath=os.path.join(os.path.dirname(os.path.abspath(__file__)),
+            "domainparser2.LINUX")
     dssp_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),
         "dssp")
     pulchra_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),
