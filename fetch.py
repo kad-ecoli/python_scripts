@@ -536,12 +536,10 @@ def fetch_uniprot(accession,execpath="domainparser2.LINUX",
         if all_chain:
             for chain in pdbe[1].split('/'):
                 PDB_chain=pdbe[0].lower()+chain
-                PDB_chain_file_list+=fetch_chain(PDB_chain,
-                    execpath,dssp_path,pulchra_path)
+                PDB_chain_file_list+=fetch_chain(PDB_chain)
         else:
                 PDB_chain=pdbe[0].lower()+pdbe[1].split('/')[0]
-                PDB_chain_file_list+=fetch_chain(PDB_chain,
-                    execpath,dssp_path,pulchra_path)
+                PDB_chain_file_list+=fetch_chain(PDB_chain)
     PDB_accession_file_list=[extract_uniprot(PDB_chain_file,accession
         ) for PDB_chain_file in PDB_chain_file_list]
     return PDB_accession_file_list
