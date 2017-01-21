@@ -57,9 +57,16 @@ Options:
 import sys,os
 import re
 
+# see http://predictioncenter.org/casp12/doc/rr_help.html for contact range
+# defination. Note that NeBcon/NN-BAYES uses different defination for long
+# range contact
+short_range_def=6 # short_range_def <= separation < medm_range_def
+medm_range_def=12 # medm_range_def  <= separation < long_range_def
+long_range_def=24 # long_range_def  <= separation. 25 in NeBcon/NN-BAYES
+
 def read_contact_map(infile="contact.map",
     cutoff_all=0,cutoff_short=0,cutoff_medium=0,cutoff_long=0,
-    sep_range="6"):
+    sep_range=str(short_range_def)):
     '''Read NN-BAYES or CASP RR format contact map. return them in a zipped 
     list with 3 fields for each residue pair. 1st field & 2nd filed are for 
     residue indices, and 3rd field is for euclidean distance.
@@ -86,18 +93,20 @@ def read_contact_map(infile="contact.map",
         cscore=float(line[-1]) # cscore for contact prediction
         seperation=abs(resi_idx1-resi_idx2)
 
-        if (sep_range=="short"  and not  6<=seperation<12) or \
-           (sep_range=="medium" and not 12<=seperation<24) or \
-           (sep_range=="long"   and not 24<=seperation   ):
+        if (sep_range=="short"  and not \
+            short_range_def<=seperation<medm_range_def) or \
+           (sep_range=="medium" and not \
+            medm_range_def<=seperation<long_range_def) or \
+           (sep_range=="long"   and not long_range_def<=seperation):
             continue
         elif not sep_range in ["all","short","medium","long"] \
             and seperation<int(sep_range):
             continue
 
         if cscore<=cutoff_all or \
-          (cscore<=cutoff_short  and    seperation<=12) or \
-          (cscore<=cutoff_medium and 12<=seperation<24) or \
-          (cscore<=cutoff_long   and 24<=seperation):
+          (cscore<=cutoff_short  and seperation<=medm_range_def) or \
+          (cscore<=cutoff_medium and medm_range_def<=seperation<long_range_def
+          ) or (cscore<=cutoff_long and long_range_def<=seperation):
             continue
 
         resi1.append(resi_idx1)
@@ -111,8 +120,8 @@ def calc_res_dist(infile="pdb.pdb",atom_sele="CA"):
     & 2nd filed are for residue indices, 3rd field is for euclidean distance.
     
     atom_sele - select atoms whose euclidean distances are to be calculated
-        `CA` for alpha carbon
-        `CB` for alpha carbon in gly in beta carbon in all other amino acids'''
+        "CA" for alpha carbon
+        "CB" for alpha carbon in gly in beta carbon in all other amino acids'''
     fp=open(infile,'rU')
     struct=fp.read().split("ENDMDL")[0] # first model only
     fp.close()
@@ -189,39 +198,32 @@ def compare_res_contact(res_dist_list,res_pred_list,cutoff=8):
         dist=res_dist_dict[(i,j)]
         cscore=res_pred_dict[(i,j)]
         cmp_list.append((cscore,i,j,dist,str(dist<cutoff).upper()))
-
-    #for res_dist in res_dist_list:
-        #for res_pred in res_pred_list:
-            #if res_dist[0]==res_pred[0] and res_dist[1]==res_pred[1]:
-                #cmp_list.append(
-#(res_pred[2],res_pred[0],res_pred[1],res_dist[2],str(res_dist[2]<cutoff).upper()))
-    ##p       resi1       resi2       dist        contact
     
     # sort on cscore
     p,resi1,resi2,dist,contact=map(list,zip(*sorted(cmp_list,reverse=True)))
     cmp_list=zip(resi1,resi2,dist,contact,p)
     return cmp_list
 
-def calc_acc_contact(cmp_list,L,sep_range="6"):
+def calc_acc_contact(cmp_list,L,sep_range=str(short_range_def)):
     '''Calculate residue contact accuracy using ouput if "compare_res_contact"
     and length of protein 'L" '''
     top_pred=dict() # top L, L/2, L/5 prediction
     
     if not sep_range in {"medium","long"}:
         top_pred["short1"]=[res_pair for res_pair in cmp_list if \
-            6<=abs(res_pair[0]-res_pair[1])<12][:L]
+            short_range_def<=abs(res_pair[0]-res_pair[1])<medm_range_def][:L]
         top_pred["short2"]=top_pred["short1"][:int(L/2)]
         top_pred["short5"]=top_pred["short1"][:int(L/5)]
 
     if not sep_range in {"short","long"}:
         top_pred["medm1" ]=[res_pair for res_pair in cmp_list if \
-            12<=abs(res_pair[0]-res_pair[1])<24][:L]
+            medm_range_def<=abs(res_pair[0]-res_pair[1])<long_range_def][:L]
         top_pred["medm2" ]=top_pred["medm1" ][:int(L/2)]
         top_pred["medm5" ]=top_pred["medm1" ][:int(L/5)]
 
     if not sep_range in {"short","medium"}:
         top_pred["long1" ]=[res_pair for res_pair in cmp_list if \
-            24<=abs(res_pair[0]-res_pair[1])   ][:L]
+            long_range_def<=abs(res_pair[0]-res_pair[1])][:L]
         top_pred["long2" ]=top_pred["long1" ][:int(L/2)]
         top_pred["long5" ]=top_pred["long1" ][:int(L/5)]
 
@@ -233,24 +235,25 @@ def calc_acc_contact(cmp_list,L,sep_range="6"):
     ACC=dict() # accuracy
     for key in top_pred:
         if top_pred[key]:
-            ACC[key]=1.*len([e for e in top_pred[key] if e[3]=="TRUE"])/len(top_pred[key])
+            ACC[key]=1.*len([e for e in top_pred[key] if e[3]=="TRUE"]
+                )/len(top_pred[key])
         else:
             ACC[key]=-1 # error
     return ACC,top_pred
 
 
-def calc_res_contact(res_dist_list,sep_range="6",cutoff=8):
-    '''Calculate residue contacts from `res_dist_list`, a zipped list of residue
+def calc_res_contact(res_dist_list,sep_range=str(short_range_def),cutoff=8):
+    '''Calculate residue contacts from "res_dist_list", a zipped list of residue
     pair distances returned by calc_res_dist
     
-    cutoff -  distance cutoff (in Angstrom) for contact, usu between 6 and 12
+    cutoff - distance cutoff (in Angstrom) for contact, usu between 6 and 12
 
     sep_range - range of sequence seperations x
         "all":    1<=x
-        "short":  6<=x<12
-        "medium":12<=x<24
-        "long":  24<=x   (most useful)
-        (default): 6<=x'''
+        "short":  short_range_def <= x < medm_range_def
+        "medium": medm_range_def  <= x < long_range_def
+        "long":   long_range_def  <=x   (most useful)
+        (default): short_range_def<=x'''
     res_dist_list_con=res_dist_list
     cutoff=float(cutoff)
     if cutoff:
@@ -259,11 +262,13 @@ def calc_res_contact(res_dist_list,sep_range="6",cutoff=8):
     if sep_range=="all":
         return [e for e in res_dist_list_con if 1<=abs(e[0]-e[1])]
     elif sep_range=="short":
-        return [e for e in res_dist_list_con if 6<=abs(e[0]-e[1])<12]
+        return [e for e in res_dist_list_con if \
+            short_range_def<=abs(e[0]-e[1])<medm_range_def]
     elif sep_range=="medium":
-        return [e for e in res_dist_list_con if 12<=abs(e[0]-e[1])<24]
+        return [e for e in res_dist_list_con if \
+            medm_range_def<=abs(e[0]-e[1])<long_range_def]
     elif sep_range=="long":
-        return [e for e in res_dist_list_con if 24<=abs(e[0]-e[1])]
+        return [e for e in res_dist_list_con if long_range_def<=abs(e[0]-e[1])]
     else:
         return [e for e in res_dist_list_con if int(sep_range)<=abs(e[0]-e[1])]
 
@@ -275,7 +280,7 @@ if __name__=="__main__":
     atom_sele="CA"
     cutoff=0
     outfmt="list"
-    sep_range="6"
+    sep_range=str(short_range_def) # "6"
     cutoff_all   =0
     cutoff_short =0
     cutoff_medium=0
