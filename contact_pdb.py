@@ -86,10 +86,12 @@ def read_contact_map(infile="contact.map",
         cscore=float(line[-1]) # cscore for contact prediction
         seperation=abs(resi_idx1-resi_idx2)
 
-        if (sep_range=="short"  and not  6<=seperation<12 ) or \
+        if (sep_range=="short"  and not  6<=seperation<12) or \
            (sep_range=="medium" and not 12<=seperation<24) or \
-           (sep_range=="long"   and not 24<=seperation    ) or \
-           (not sep_range!="all" and seperation<int(sep_range)):
+           (sep_range=="long"   and not 24<=seperation   ):
+            continue
+        elif not sep_range in ["all","short","medium","long"] \
+            and seperation<int(sep_range):
             continue
 
         if cscore<=cutoff_all or \
@@ -175,13 +177,25 @@ def compare_res_contact(res_dist_list,res_pred_list,cutoff=8):
     indices, 3rd field is for euclidean distance, 4th field for contact prediction 
     confidence p. 5th field for whether they are in contact in PDB structure. 
     '''
+    res_dist_dict=dict() # key is residue pair, value is distance
+    for i,j,dist in res_dist_list:
+        res_dist_dict[(i,j)]=dist
+    res_pred_dict=dict() # key is residue pair, value is cscore
+    for i,j,cscore in res_pred_list:
+        res_pred_dict[(i,j)]=cscore
+
     cmp_list=[]
-    for res_dist in res_dist_list:
-        for res_pred in res_pred_list:
-            if res_dist[0]==res_pred[0] and res_dist[1]==res_pred[1]:
-                cmp_list.append(
-(res_pred[2],res_pred[0],res_pred[1],res_dist[2],str(res_dist[2]<cutoff).upper()))
-    #p       resi1       resi2       dist        contact
+    for i,j in set(res_dist_dict.keys()).intersection(res_pred_dict.keys()):
+        dist=res_dist_dict[(i,j)]
+        cscore=res_pred_dict[(i,j)]
+        cmp_list.append((cscore,i,j,dist,str(dist<cutoff).upper()))
+
+    #for res_dist in res_dist_list:
+        #for res_pred in res_pred_list:
+            #if res_dist[0]==res_pred[0] and res_dist[1]==res_pred[1]:
+                #cmp_list.append(
+#(res_pred[2],res_pred[0],res_pred[1],res_dist[2],str(res_dist[2]<cutoff).upper()))
+    ##p       resi1       resi2       dist        contact
     
     # sort on cscore
     p,resi1,resi2,dist,contact=map(list,zip(*sorted(cmp_list,reverse=True)))
@@ -255,7 +269,7 @@ def calc_res_contact(res_dist_list,sep_range="6",cutoff=8):
 
 if __name__=="__main__":
     if len(sys.argv)<2:
-        print >>sys.stderr,docstring
+        sys.stderr.write(docstring)
         exit()
 
     atom_sele="CA"
@@ -290,7 +304,7 @@ if __name__=="__main__":
             exit()
     file_list=[arg for arg in sys.argv[1:] if not arg.startswith("-")]
     if not file_list:
-        print >>sys.stderr,docstring+"\nERROR! No PDB file"
+        sys.stderr.write(docstring+"\nERROR! No PDB file")
         exit()
     
     res_dist_list=calc_res_dist(file_list[0],atom_sele)
@@ -299,9 +313,9 @@ if __name__=="__main__":
     if len(file_list)==1: # calculate residue contact
         for res_pair in res_con_list:
             if outfmt.startswith("dist"):
-                print "%d\t%d\t%.1f"%(res_pair[0],res_pair[1],res_pair[2])
+                sys.stdout.write("%d\t%d\t%.1f\n"%(res_pair[0],res_pair[1],res_pair[2]))
             elif outfmt=="list":
-                print "%d\t%d"%(res_pair[0],res_pair[1])
+                sys.stdout.write("%d\t%d\n"%(res_pair[0],res_pair[1]))
         if not cutoff and outfmt=="list":
             sys.stderr.write("\nWARNING! cutoff not set\n\n")
 
@@ -315,11 +329,11 @@ if __name__=="__main__":
         if not outfmt.startswith("stat"):
             for res_pair in cmp_list: #resi1,resi2,dist,contact,p
                 if outfmt.startswith("dist"):
-                    print "%d\t%d\t%.1f\t%s\t%.3f"%(res_pair[0],res_pair[1],
-                        res_pair[2],res_pair[3],res_pair[4])
+                    sys.stdout.write("%d\t%d\t%.1f\t%s\t%.3f\n"%(res_pair[0],
+                        res_pair[1],res_pair[2],res_pair[3],res_pair[4]))
                 elif outfmt=="list":
-                    print "%d\t%d\t%s\t%.3f"%(res_pair[0],res_pair[1],
-                        res_pair[3],res_pair[4])
+                    sys.stdout.write("%d\t%d\t%s\t%.3f\n"%(res_pair[0],
+                        res_pair[1],res_pair[3],res_pair[4]))
         else: # outfmt=="stat"
             L=map(list,zip(*res_dist_list))
             L=L[0]+L[1]
@@ -337,7 +351,8 @@ if __name__=="__main__":
                           "long1" ,"long2" ,"long5",
                           "all1"  ,"all2"  ,"all5"]
             sys.stderr.write('\t'.join(key_list)+'\n')
-            print '\t'.join(['%.3f'%ACC[key] for key in key_list])
+            sys.stdout.write('\t'.join(['%.3f'%ACC[key] for key in key_list]
+                )+'\n')
 
         if not cutoff:
             sys.stderr.write("\nWARNING! cutoff not set\n\n")
