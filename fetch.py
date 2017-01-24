@@ -247,7 +247,7 @@ def extract_chain_from_bundle(tarball_name,chainID_list=[]):
         # extract text for specific chain
         PDB_txt=''    
         for line in pdb_lines:
-            section=line.split()[0]
+            section=line[:6].rstrip()
             if section in chainID_column and (not chainID_column[section] \
                 or line[chainID_column[section]]==New_chain_ID):
                 PDB_txt+=line+'\n'
@@ -393,7 +393,7 @@ def extract_chain(PDB_file,chainID_list=[],
         PDB_txt=''
         atom_serial_list=[]
         for line in pdb_lines:
-            section=line.split()[0]
+            section=line[:6].rstrip()
             if section in chainID_column and (not chainID_column[section] \
                 or line[chainID_column[section]]==chainID):
                 if section in ("ATOM","HETATM"):
