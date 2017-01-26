@@ -18,7 +18,6 @@ Pairwise sequence alignment by standard Needleman-Wunsch algorithm
     NWalign GKDGL F.pdb 5     (align Sequence 1 by keyboard and 2 in pdb)
 '''
 import sys
-from fixMSE import code_with_modified_residues as aa
 gap_open=-11 # gap gapopen
 gap_extn=-1 # gap gapext
 Blosum62Matrix=[
@@ -57,19 +56,10 @@ def readFastaOrRawSequence(infile="F1.fasta"):
 
 def readPDB(infile="F1.pdb"):
     '''read a sequence from a PDB file'''
-    br=open(infile,'rU').read()
-    seq=''
-    for line in br.splitlines():
-        if line.startswith('END') or line.startswith('TER'):
-            break
-        elif line.startswith('ATOM ') and line[13:15]=="CA":
-            seq+=NameMap(line[17:20])
-    return seq
-
-def NameMap(residue="ALA"):
-    '''Map a three-letter abbreviation to a single-letter code.'''
-    residue=residue.upper()
-    return aa[residue] if residue in aa else 'X'
+    from pdb2fasta import pdb2seq
+    header_list,sequence_list=pdb2seq(infile,
+        PERMISSIVE="MSE",outfmt="PDB",allowX=True)
+    return sequence_list[0]
 
 def empty_matrix(N_rows, N_cols, fill=0):
     '''Return a matrix (list of lists) which has `N_rows` rows and `N_cols`
@@ -114,6 +104,49 @@ def print_alignment(sequenceA='',sequenceB=''):
     print sequenceB
     print ''.join([str(i%10) for i in range(1,len(sequenceA)+1)])+'\n' #resi
 
+def initialize_matrix(len1=0,len2=0,alternative=True):
+    '''initialize Dynamic Programming matrices
+    len1 - length of sequence 1
+    len2 - length of sequence 2
+    alternaive - whether to adopt alternative matrix initialization by wei zheng
+    '''
+    val=empty_matrix(len1+1,len2+1)
+    preV=empty_matrix(len1+1,len2+1) # penalty score of horizontal long gap
+    preH=empty_matrix(len1+1,len2+1) # penalty score of vertical long gap
+    jpV=empty_matrix(len1+1,len2+1)
+    jpH=empty_matrix(len1+1,len2+1)
+    idir=empty_matrix(len1+1,len2+1,fill='')
+
+    # fill first row/column of dynamic programming score matrix val,
+    # and path matrix idir
+    for i in range(1,len1+1):
+        idir[i][0]='-'
+        jpH[i][0]=i
+    for j in range(1,len2+1):
+        idir[0][j]='|'
+        jpV[0][j]=j
+    for i in range(1,len1+1):
+        val[i][0]=gap_open+gap_extn*(i-1)
+    for j in range(1,len2+1):
+        val[0][j]=gap_open+gap_extn*(j-1)
+
+    if alternative:
+        init_min=-999999999 # -1-sys.max
+        for i in range(1,len1+1):
+            preH[i][0]=gap_open+gap_extn*(i-1)
+        for j in range(1,len2+1):
+            preV[0][j]=gap_open+gap_extn*(j-1)
+        for i in range(len1+1):
+            preV[i][0]=init_min
+        for j in range(len2+1):
+            preH[0][j]=init_min
+    else:
+        for i in range(1,len1+1):
+            preV[i][0]=gap_open+gap_extn*(i-1)
+        for j in range(1,len2+1):
+            preH[0][j]=gap_open+gap_extn*(j-1)
+    return val,preV,preH,jpV,jpH,idir
+
 def calcualte_score_gotoh(f1="GKDGL",f2="EVADELVSE", imut=Blosum62Matrix, 
     gap_open=gap_open, gap_extn=gap_extn): # "imut" is scoring matrix
     '''Calculate the dynamic programming matrix using Gotoh algorithm.
@@ -135,13 +168,8 @@ def calcualte_score_gotoh(f1="GKDGL",f2="EVADELVSE", imut=Blosum62Matrix,
     # initialize matrices
     len1=len(f1)
     len2=len(f2)
-    val=empty_matrix(len1+1,len2+1)
-    preV=empty_matrix(len1+1,len2+1) # penalty score of horizontal long gap
-    preH=empty_matrix(len1+1,len2+1) # penalty score of vertical long gap
-    jpV=empty_matrix(len1+1,len2+1)
-    jpH=empty_matrix(len1+1,len2+1)
     score=empty_matrix(len1+1,len2+1) # score of align i in f1 to j in f2
-    idir=empty_matrix(len1+1,len2+1,fill='')
+    val,preV,preH,jpV,jpH,idir=initialize_matrix(len1,len2,alternative=True)
 
     # convert char sequence to int sequence (aa2int)
     seq1=[[i for i in range(len(seqW)) if c==seqW[i]][0] for c in f1]
@@ -151,21 +179,6 @@ def calcualte_score_gotoh(f1="GKDGL",f2="EVADELVSE", imut=Blosum62Matrix,
         for j in range(len2):
             score[i+1][j+1]=imut[seq1[i]][seq2[j]]
 
-    # fill first row/column of dynamic programming score matrix val,
-    # and path matrix idir
-    for i in range(1,len1+1):
-        idir[i][0]='-'
-        jpH[i][0]=i
-    for j in range(1,len2+1):
-        idir[0][j]='|'
-        jpV[0][j]=j
-    for i in range(1,len1+1):
-        val[i][0]=gap_open+gap_extn*(i-1)
-        preV[i][0]=gap_open+gap_extn*(i-1)
-    for j in range(1,len2+1):
-        val[0][j]=gap_open+gap_extn*(j-1)
-        preH[0][j]=gap_open+gap_extn*(j-1)
-    
     # fill val and idir
     for i in range(1,len1+1):
         for j in range(1,len2+1):
@@ -244,6 +257,7 @@ def NeedlemanWunsch(f1="GKDGL",f2="EVADELVSE", imut=Blosum62Matrix,
     # sequenceA (aligned f1); sequenceB (aligned f2)
     sequenceA,sequenceB=trace_back_gotoh(idir,jpV,jpH,f1,f2)
     print_alignment(sequenceA,sequenceB)
+    return sequenceA,sequenceB
 
 if __name__=="__main__":
     if len(sys.argv)<2:

@@ -144,9 +144,26 @@ def DomainParser(pdb_file,execpath="domainparser2.LINUX",
     return '\t'.join([
         basename.split('.')[0],seqlen,domain_num,' '.join(domain_list)])
 
+def locate_DomainParser():
+    '''locate the location of DomainParser exectuable'''
+    if os.path.isfile(os.path.join(os.path.dirname(
+        os.path.abspath(__file__)),"domainparser2")):
+        execpath=os.path.join(os.path.dirname(
+            os.path.abspath(__file__)),"domainparser2")
+    elif os.path.isfile("domainparser2"):
+        execpath=os.path.abspath(execpath)
+    elif os.path.isfile(os.path.join(os.path.dirname(
+        os.path.abspath(__file__)),"domainparser2.LINUX")):
+        execpath=os.path.join(os.path.dirname(
+            os.path.abspath(__file__)),"domainparser2.LINUX")
+    elif os.path.isfile("domainparser2.LINUX"):
+        execpath=os.path.abspath("domainparser2.LINUX")
+    else:
+        execpath="domainparser2"
+    return execpath
+
 if __name__=="__main__":
-    execpath=os.path.join(os.path.dirname(os.path.abspath(__file__)),
-        "domainparser2.LINUX")
+    execpath=locate_DomainParser()
     dssp_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),
         "dssp")
     pulchra_path=os.path.join(os.path.dirname(os.path.abspath(__file__)),

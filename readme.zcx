@@ -12,6 +12,7 @@ pfam2fasta.py      # convert Pfam file to FASTA file
 NWalign.py         # global sequence alignment
 seq_similarity.py  # sequence identity matrix for MSA
 split_fasta.py     # split multi sequence FASTA into one sequence FASTA
+fasta2len.py       # list the length of entries in fasta sequence
 
 #### structure parsing ####
 contact_pdb.py     # calculate residue contacts
@@ -26,6 +27,7 @@ HomologyModelling.py # homology modelling by MODELLER
 strip_sidechain.py # remove side
 DomainParser.py    # partition a PDB chain into domains
 split_uniprot.py   # partition a PDB file into different uniprot ID
+pdb2fasta.py       # convert PDB file to fasta file
 
 #### GO parsing ####
 obo2csv.py         # parsing obo format GO defination file
@@ -35,8 +37,7 @@ grep-GO.sh         # uniquely grep all GO terms in plain text
 grep-uniprot.sh    # uniquely grep all uniprot accession in plain text
 
 #### mathematics ultility ####
-load_matrix.py     # load matrix from plain text file
-                   # (obsolete: recommend numpy.loadtxt instead)
+getPvalue.py       # calculate Student's T test p-value
 
 #### system ultility ####
 read_mail.py       # read system mail
