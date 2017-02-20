@@ -77,7 +77,7 @@ def read_contact_map(infile="contact.map",
     fp=open(infile,'rU')
     txt=fp.read().splitlines()
     fp.close()
-    pattern=re.compile('(^\d+\s+\d+\s+\d+\s+\d+\s+[.\d]+)|(^\d+\s+\d+\s+[.\d]+)')
+    pattern=re.compile('(^\d+\s+\d+\s+\d+\s+\d+\s+[-.e\d]+)|(^\d+\s+\d+\s+[-.e\d]+)')
     for line in txt:
         if not line.strip(): # skip empty lines
             continue
