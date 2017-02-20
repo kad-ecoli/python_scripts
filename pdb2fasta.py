@@ -123,6 +123,7 @@ def mmCIF2seq(infile="pdb.cif", PERMISSIVE="MSE",outfmt="PDB",
 
     aa3to1=code_with_modified_residues
 
+    chain_list=[]
     chain_dict=dict() # Each chain will be one keu
     for line in txt.splitlines():
         if not line.startswith("ATOM") or line.startswith("HETATM"):
@@ -156,6 +157,7 @@ def mmCIF2seq(infile="pdb.cif", PERMISSIVE="MSE",outfmt="PDB",
 
         if not label_asym_id in chain_dict:
             chain_dict[label_asym_id]=[]
+            chain_list.append(label_asym_id)
 
         residue_tuple=(label_seq_id,aa)
         if not residue_tuple in chain_dict[label_asym_id]:
@@ -164,7 +166,7 @@ def mmCIF2seq(infile="pdb.cif", PERMISSIVE="MSE",outfmt="PDB",
     header_list=[]
     sequence_list=[]
     PDBID=os.path.basename(infile).split('.')[0]
-    for chain_id in sorted(chain_dict):
+    for chain_id in chain_list:
         res_num_list,sequence=zip(*chain_dict[chain_id])
         header_list.append(PDBID+':'+chain_id)
         sequence_list.append(''.join(sequence))
@@ -194,7 +196,8 @@ def pdbtxt2seq(txt='',infile='pdb.pdb',PERMISSIVE="MSE",outfmt="PDB",
         SEQRES=False # use "ATOM" is "SEQRES" is absent
 
     aa3to1=code_with_modified_residues
-
+    
+    chain_list=[]
     chain_dict=dict() # Each chain will be one key
     for line in txt.splitlines():
         line=line+' '*(80-len(line)) # Each line contains at least 80 char
@@ -213,6 +216,7 @@ def pdbtxt2seq(txt='',infile='pdb.pdb',PERMISSIVE="MSE",outfmt="PDB",
             if tmp_seq:
                 if not chain_id in chain_dict:
                     chain_dict[chain_id]=[]
+                    chain_list.append(chain_id)
                 chain_dict[chain_id]+=tmp_seq
             continue
 
@@ -241,6 +245,7 @@ def pdbtxt2seq(txt='',infile='pdb.pdb',PERMISSIVE="MSE",outfmt="PDB",
 
         if not chain_id in chain_dict:
             chain_dict[chain_id]=[]
+            chain_list.append(chain_id)
 
         if not residue_tuple in chain_dict[chain_id]:
             chain_dict[chain_id].append(residue_tuple)
@@ -249,7 +254,7 @@ def pdbtxt2seq(txt='',infile='pdb.pdb',PERMISSIVE="MSE",outfmt="PDB",
     sequence_list=[]
     PDBID=os.path.basename(infile).split('.')[0]
     #PDBID=os.path.basename(infile).upper().split('.')[0]
-    for chain_id in sorted(chain_dict):
+    for chain_id in chain_list:
         res_num_list,sequence=zip(*chain_dict[chain_id])
         header_list.append(PDBID+':'+chain_id)
         sequence_list.append(''.join(sequence))
