@@ -32,7 +32,7 @@ def reindex_pdb_by_index(startindex=1,PDBtxt=''):
             not line.startswith("HETATM") and not line.startswith("TER")):
             PDBtxt_reindex+=line+'\n'
             continue
-        elif not line[16] in {'A',' '}: # alternative location identifier
+        elif not line[16] in ['A',' ']: # alternative location identifier
             continue
         resSeq=line[22:27] # residue sequence number
         current_chainID=line[21] # chain identifier
@@ -94,7 +94,7 @@ def reindex_pdb_by_sequence(sequence_ref,PDBtxt):
     warn_chainID='' # warning about new chain ID
 
     for line in PDBtxt.splitlines():
-        if len(line)<27 or not line[16] in {'A',' '} or (
+        if len(line)<27 or not line[16] in ['A',' '] or (
             not line.startswith("ATOM  ") and not line.startswith("TER"
             ) and not (line.startswith("HETATM") and line[17:20]=="MSE")):
             continue
@@ -133,8 +133,8 @@ def reindex_pdb(startindex,infile,clean=True):
             PDBtxt+=line+'\n'
             break
         if line.startswith("ATOM  ") or line.startswith("TER") or (
-            clean==False and not line[:6] in {"DBREF ","SEQADV","MODRES",
-            "HELIX ","SHEET ","SSBOND","SITE  "}):
+            clean==False and not line[:6] in ["DBREF ","SEQADV","MODRES",
+            "HELIX ","SHEET ","SSBOND","SITE  "]):
             PDBtxt+=line+'\n'
     fp.close()
 

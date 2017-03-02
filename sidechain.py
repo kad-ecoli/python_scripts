@@ -207,12 +207,14 @@ def sidechain(CAtxt,algo,execpath,seq,super_algo,super_execpath):
         fp=open(tmp_dir+"alignment.ali",'w')
         if seq:
             fp.write(aln_template.substitute(
-                chain1=header_list[0], chain2=header_list[1],
+                chain1=header_list[0].replace('_',' '),
+                chain2=header_list[-1].replace('_',' '),
                 template_sequence='/'.join(user_sequence_list),
                 target_sequence='/'.join(sequence_list)))
         else:
             fp.write(aln_template.substitute(
-                chain1=header_list[0], chain2=header_list[1],
+                chain1=header_list[0].replace('_',' '),
+                chain2=header_list[-1].replace('_',' '),
                 template_sequence='/'.join(sequence_list),
                 target_sequence='/'.join(sequence_list)))
         fp.close()

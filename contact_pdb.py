@@ -209,25 +209,25 @@ def calc_acc_contact(cmp_list,L,sep_range=str(short_range_def)):
     and length of protein 'L" '''
     top_pred=dict() # top L, L/2, L/5 prediction
     
-    if not sep_range in {"medium","long"}:
+    if not sep_range in ["medium","long"]:
         top_pred["short1"]=[res_pair for res_pair in cmp_list if \
             short_range_def<=abs(res_pair[0]-res_pair[1])<medm_range_def][:L]
         top_pred["short2"]=top_pred["short1"][:int(L/2)]
         top_pred["short5"]=top_pred["short1"][:int(L/5)]
 
-    if not sep_range in {"short","long"}:
+    if not sep_range in ["short","long"]:
         top_pred["medm1" ]=[res_pair for res_pair in cmp_list if \
             medm_range_def<=abs(res_pair[0]-res_pair[1])<long_range_def][:L]
         top_pred["medm2" ]=top_pred["medm1" ][:int(L/2)]
         top_pred["medm5" ]=top_pred["medm1" ][:int(L/5)]
 
-    if not sep_range in {"short","medium"}:
+    if not sep_range in ["short","medium"]:
         top_pred["long1" ]=[res_pair for res_pair in cmp_list if \
             long_range_def<=abs(res_pair[0]-res_pair[1])][:L]
         top_pred["long2" ]=top_pred["long1" ][:int(L/2)]
         top_pred["long5" ]=top_pred["long1" ][:int(L/5)]
 
-    if not sep_range in {"short","medium","long"}:
+    if not sep_range in ["short","medium","long"]:
         top_pred["all1"  ]=cmp_list[:L]
         top_pred["all2"  ]=top_pred["all1"  ][:int(L/2)]
         top_pred["all5"  ]=top_pred["all1"  ][:int(L/5)]

@@ -143,7 +143,7 @@ def mmCIF2seq(infile="pdb.cif", PERMISSIVE="MSE",outfmt="PDB",
 
         if int(pdbx_PDB_model_num)>1:
             break # just parse the first model
-        if label_atom_id!="CA" or not label_alt_id in {'.','A'}: # just CA
+        if label_atom_id!="CA" or not label_alt_id in ['.','A']: # just CA
             continue
 
         if PERMISSIVE=="ATOM" and group_PDB!="ATOM":
@@ -222,7 +222,7 @@ def pdbtxt2seq(txt='',infile='pdb.pdb',PERMISSIVE="MSE",outfmt="PDB",
 
         if line[13:15]!="CA": # Carbon Alpha Only
             continue
-        if not line[16] in {' ','A'}: # remove alternative location
+        if not line[16] in [' ','A']: # remove alternative location
             continue
 
         residue=line[17:20] # residue name

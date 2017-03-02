@@ -182,13 +182,13 @@ def parse_GOA(GOA='',
             accession_list=[accession]
 
         for accession in accession_list:
-            if category in {"ALL"}:
+            if category in ["ALL"]:
                 if not accession in ALL_dict[Aspect]:
                     ALL_dict[Aspect][accession]=[GOterm]
                 else:
                     ALL_dict[Aspect][accession].append(GOterm)
         
-            if evidence!="IEA" and category in {"ALL","NONIEA"}:
+            if evidence!="IEA" and category in ["ALL","NONIEA"]:
                 if not accession in NONIEA_dict[Aspect]:
                     NONIEA_dict[Aspect][accession]=[GOterm]
                 else:
@@ -401,9 +401,9 @@ if __name__=="__main__":
     for GOA in argv:
         ALL_dict,NONIEA_dict,CAFA_dict=parse_GOA(GOA,excludeGO,DB, \
             ID_map_dict,obo_dict,category,infmt)
-        if category in {"ALL"}:
+        if category in ["ALL"]:
             merge_ALL_dict=merge_GOA_dict(merge_ALL_dict,ALL_dict)
-        if category in {"NONIEA","ALL"}:
+        if category in ["NONIEA","ALL"]:
             merge_NONIEA_dict=merge_GOA_dict(merge_NONIEA_dict,NONIEA_dict)
         merge_CAFA_dict=merge_GOA_dict(merge_CAFA_dict,CAFA_dict)
 
@@ -413,11 +413,11 @@ if __name__=="__main__":
     uniprot_list_CAFA=get_accession_list(merge_CAFA_dict)
 
     ## write output mapping files
-    for is_a in {False,True}: # whether trace back parent node
+    for is_a in [False,True]: # whether trace back parent node
         suffix=".is_a"*is_a
 
         # all GO terms
-        if category in {"ALL"}:
+        if category in ["ALL"]:
             GOterms_txt,GOterms_txt_Aspect=create_UNIPROT_GOterms(
                 uniprot_list_ALL,merge_ALL_dict,
                 obo_dict if is_a else False,excludeGO)
@@ -429,7 +429,7 @@ if __name__=="__main__":
                 GOterms_txt, GOterms_txt_Aspect, filename)
 
         # reviewed GO terms
-        if category in {"NONIEA","ALL"} and infmt!="INTERPRO":
+        if category in ["NONIEA","ALL"] and infmt!="INTERPRO":
             GOterms_txt,GOterms_txt_Aspect=create_UNIPROT_GOterms(
                 uniprot_list_NONIEA,merge_NONIEA_dict,
                 obo_dict if is_a else False,excludeGO)

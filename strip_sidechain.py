@@ -13,7 +13,7 @@ def strip_sidechain(fullatom,convertAA=False,amide=True):
     '''strip side chain from full atom PDB file "fullatom"
     convertAA - convert all amino acid to one specific type
     amide - whether preserve amide bond atoms'''
-    atom_name_set={"CA","C ","N ","O "} if amide else "CA"
+    atom_name_set=["CA","C ","N ","O "] if amide else ["CA"]
     fp=open(fullatom,'rU')
     fullatom_lines=fp.readlines()
     fp.close()

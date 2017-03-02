@@ -56,9 +56,9 @@ aa1to3 = { # 3 letter to 1 letter amino acid code conversion
     'J':'UNK', 
     }
 
-standard_amino_acid={
+standard_amino_acid=[
     'ALA', 'VAL', 'PHE', 'PRO', 'MET', 'ILE', 'LEU', 'ASP', 'GLU', 'LYS',
-    'ARG', 'SER', 'THR', 'TYR', 'HIS', 'CYS', 'ASN', 'GLN', 'TRP', 'GLY'}
+    'ARG', 'SER', 'THR', 'TYR', 'HIS', 'CYS', 'ASN', 'GLN', 'TRP', 'GLY']
 
 def fixMSE(infile="pdb.pdb",aa3to1=code_MSE,clean=False):
     '''fix MSE and other HETATM record in PDB file "infile"
