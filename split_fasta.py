@@ -18,20 +18,20 @@ option:
 '''
 import sys,os
 
-def split_fasta(infile="seq.txt",outfile="seq.fasta",outdir='',
+def split_fasta(infile="seq.txt",outfile="seq.fasta",outdir='.',
     batch_size=1,exclude_list=''):
     '''Split Multiple-Sequence-FASTA file into Single-Sequence-FASTA files.
     Return a list of headers. Options:
         infile  - Multiple sequence fasta for all input sequences
         outfile - a list containing target one sequence FASTA file name
-        outdir  - (default: the same as dirname of "infile")
+        outdir  - (default: current directory)
                   path to the target folders
         batch_size - number of sequence in each splitted FASTA file
         exclude_list - a file listing entries that are not included
     '''
     infile=os.path.abspath(infile)
-    if not outdir:
-        outdir=os.path.dirname(infile)
+    #if not outdir:
+        #outdir=os.path.dirname(infile)
     if not os.path.isdir(outdir):
         os.makedirs(outdir)
     outfile_list=[outfile] if isinstance(outfile,str) else outfile

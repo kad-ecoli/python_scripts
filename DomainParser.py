@@ -151,7 +151,7 @@ def locate_DomainParser():
         execpath=os.path.join(os.path.dirname(
             os.path.abspath(__file__)),"domainparser2")
     elif os.path.isfile("domainparser2"):
-        execpath=os.path.abspath(execpath)
+        execpath=os.path.abspath("domainparser2")
     elif os.path.isfile(os.path.join(os.path.dirname(
         os.path.abspath(__file__)),"domainparser2.LINUX")):
         execpath=os.path.join(os.path.dirname(
