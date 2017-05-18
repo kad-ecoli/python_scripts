@@ -50,8 +50,8 @@ def batch_retrival(query_list=[],infmt="ACC",outfmt="fasta",db=''):
         read_entry=False # whether to read current entry
         for line in fp: # read line by line because trembl is huge
             if line.startswith('>'):
-                read_entry=(line[1:].split()[0] in query_list or (
-                   '|' in line and line.split('|')[1] in query_list))
+                read_entry=(line[1:].split()[0] in query_list or ('|' in
+                    line and line.split('|')[1].split()[0] in query_list))
             if read_entry:
                 page+=line
         fp.close()
