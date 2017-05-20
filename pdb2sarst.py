@@ -29,6 +29,13 @@ options:
     -dssp_path=./dssp
         path to DSSP executable. By default it is guessed by
         location of this script
+
+    -fold_type_cutoff=0.9
+        cutoff to define alpha, beta, or alpha-beta protein
+        0.9 - (default) protein is coil (c) if >90% of residues are coil
+              protein is alpha(a) if >90% of non-coil residues are within helix
+              protein is beta (b) if >90% of non-coil residues are within strand
+              otherwise a protein is alpha-beta (ab)
 '''
 import sys,os
 import subprocess
@@ -155,7 +162,8 @@ def runDSSP(infile="pdb.pdb",dssp_path="dssp",pulchra_path="pulchra"):
         shutil.rmtree(tmp_dir)
     return stdout
 
-def parseDSSP(dssp_txt='',show_seq=True,show_ss=8,show_sarst=True):
+def parseDSSP(dssp_txt='',show_seq=True,show_ss=8,show_sarst=True, 
+    fold_type_cutoff=0.9):
     '''parse cleaned dssp output. 
     output:
         dssp_dict: a dict whose key is chain ID and value
@@ -200,10 +208,25 @@ def parseDSSP(dssp_txt='',show_seq=True,show_ss=8,show_sarst=True):
     for chainID in dssp_dict:
         ss_type_dict[chainID]=0
         if show_ss:
-            if set('HIG').intersection(dssp_dict[chainID][show_seq]):
-                ss_type_dict[chainID]+=1
-            if set('BE').intersection(dssp_dict[chainID][show_seq]):
-                ss_type_dict[chainID]+=2
+            helix_res_num=0.
+            strand_res_num=0.
+            for resn in dssp_dict[chainID][show_seq]:
+                helix_res_num+=(resn in 'HIG')
+                strand_res_num+=(resn in 'BE')
+            L=1.*len(dssp_dict[chainID][show_seq])
+            if ((L-helix_res_num-strand_res_num)/L<fold_type_cutoff):
+                if 1.*helix_res_num/(
+                    helix_res_num+strand_res_num)>=fold_type_cutoff:
+                    ss_type_dict[chainID]=1
+                elif 1.*strand_res_num/(
+                    helix_res_num+strand_res_num)>=fold_type_cutoff:
+                    ss_type_dict[chainID]=2
+                else:
+                    ss_type_dict[chainID]=3
+            #if set('HIG').intersection(dssp_dict[chainID][show_seq]):
+                #ss_type_dict[chainID]+=1
+            #if set('BE').intersection(dssp_dict[chainID][show_seq]):
+                #ss_type_dict[chainID]+=2
     return dssp_dict,ss_type_dict
 
 if __name__=="__main__":
@@ -213,6 +236,7 @@ if __name__=="__main__":
     show_chain=True
     dssp_path=''
     pulchra_path=''
+    fold_type_cutoff=0.9
 
     argv=[]
     for arg in sys.argv[1:]:
@@ -228,6 +252,8 @@ if __name__=="__main__":
             dssp_path=arg[len("-dssp_path="):]
         elif arg.startswith('-pulchra_path='):
             pulchra_path=arg[len("-pulchra_path="):]
+        elif arg.startswith('-fold_type_cutoff='):
+            fold_type_cutoff=float(arg[len("-fold_type_cutoff="):])
         elif arg.startswith('-'):
             sys.stderr.write("ERROR! Unknown argument %s\n"%arg)
             exit()
@@ -246,7 +272,8 @@ if __name__=="__main__":
 
     for infile in argv:
         dssp_txt=runDSSP(infile,dssp_path,pulchra_path)
-        dssp_dict,ss_type_dict=parseDSSP(dssp_txt,show_seq,show_ss,show_sarst)
+        dssp_dict,ss_type_dict=parseDSSP(dssp_txt,show_seq,show_ss,show_sarst,
+            fold_type_cutoff)
 
         PDBID=os.path.basename(infile).split('.')[0]
         txt=''
