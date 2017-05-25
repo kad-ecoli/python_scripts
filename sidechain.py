@@ -288,7 +288,7 @@ if __name__=="__main__":
             from superpose import superpose
             importable_superpose_module=True
         except Exception,e:
-            sys.stderr.write(e+"\nERROR! Cannot import superpose module\n")
+            sys.stderr.write(str(e)+"\nERROR! Cannot import superpose module\n")
             exit()
         if not super_execpath:
             super_execpath=locate_execpath(super_algo.split('-')[0])

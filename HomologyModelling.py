@@ -204,8 +204,10 @@ def HomologyModelling(alignment="alignment.fasta", execpath="mod9.15",
     # create temporary folder
     tmp_dir="/tmp/"+os.getenv("USER")+'/modeller'+md+ \
        str(random.randint(1000,9999))+'/'
-    if not os.path.isdir(tmp_dir):
-        os.makedirs(tmp_dir)
+    while (os.path.isdir(tmp_dir)):
+        tmp_dir="/tmp/"+os.getenv("USER")+'/modeller'+md+ \
+            str(random.randint(1000,9999))+'/'
+    os.makedirs(tmp_dir)
     
     # read FASTA format multiple sequence alignment
     fp=open(alignment,'rU')
@@ -293,7 +295,7 @@ def HomologyModelling(alignment="alignment.fasta", execpath="mod9.15",
     fp.close()
     shutil.copy(target_filename_tmp,target_filename)
 
-    # cleanup temporary folder
+    # clean up temporary folder
     if os.path.isdir(tmp_dir):
         shutil.rmtree(tmp_dir)
     return target_filename,template_filename_lst[0]
@@ -350,7 +352,7 @@ if __name__=="__main__":
             from superpose import superpose
             importable_superpose_module=True
         except Exception,e:
-            sys.stderr.write(e+"\nERROR! Cannot import superpose module\n")
+            sys.stderr.write(str(e)+"\nERROR! Cannot import superpose module\n")
             exit()
 
     # run MODELLER
