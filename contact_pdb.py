@@ -238,7 +238,7 @@ def calc_acc_contact(cmp_list,L,sep_range=str(short_range_def)):
             ACC[key]=1.*len([e for e in top_pred[key] if e[3]=="TRUE"]
                 )/len(top_pred[key])
         else:
-            ACC[key]=-1 # error
+            ACC[key]=0 # error
     return ACC,top_pred
 
 
