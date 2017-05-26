@@ -53,6 +53,8 @@ Options:
     -cutoff_short=0.5  # ignore short  range contact prediction p<=0.5
     -cutoff_medium=0.4 # ignore medium range contact prediction p<=0.4
     -cutoff_long=0.3   # ignore medium range contact prediction p<=0.3
+
+    -offset=0    add "offset" to residue index in predicted contact map
 '''
 import sys,os
 import re
@@ -66,7 +68,7 @@ long_range_def=24 # long_range_def  <= separation. 25 in NeBcon/NN-BAYES
 
 def read_contact_map(infile="contact.map",
     cutoff_all=0,cutoff_short=0,cutoff_medium=0,cutoff_long=0,
-    sep_range=str(short_range_def)):
+    sep_range=str(short_range_def),offset=0):
     '''Read NN-BAYES or CASP RR format contact map. return them in a zipped 
     list with 3 fields for each residue pair. 1st field & 2nd filed are for 
     residue indices, and 3rd field is for euclidean distance.
@@ -88,8 +90,8 @@ def read_contact_map(infile="contact.map",
         if not len(line) in (3,5):
             continue
 
-        resi_idx1=int(line[0]) # residue index 1
-        resi_idx2=int(line[1]) # residue index 2
+        resi_idx1=int(line[0])+offset # residue index 1
+        resi_idx2=int(line[1])+offset # residue index 2
         cscore=float(line[-1]) # cscore for contact prediction
         seperation=abs(resi_idx1-resi_idx2)
 
@@ -198,7 +200,10 @@ def compare_res_contact(res_dist_list,res_pred_list,cutoff=8):
         dist=res_dist_dict[(i,j)]
         cscore=res_pred_dict[(i,j)]
         cmp_list.append((cscore,i,j,dist,str(dist<cutoff).upper()))
-    
+   
+    #if len(cmp_list)==0:
+        #return []
+
     # sort on cscore
     p,resi1,resi2,dist,contact=map(list,zip(*sorted(cmp_list,reverse=True)))
     cmp_list=zip(resi1,resi2,dist,contact,p)
@@ -285,6 +290,7 @@ if __name__=="__main__":
     cutoff_short =0
     cutoff_medium=0
     cutoff_long  =0
+    offset  =0
     for arg in sys.argv[1:]:
         if arg.startswith("-cutoff="):
             cutoff=float(arg[len("-cutoff="):])
@@ -304,6 +310,8 @@ if __name__=="__main__":
             cutoff_medium=float(arg[len("-cutoff_medium="):])
         elif arg.startswith("-cutoff_long="):
             cutoff_long=float(arg[len("-cutoff_long="):])
+        elif arg.startswith("-offset="):
+            offset=int(arg[len("-offset="):])
         elif arg.startswith("-"):
             sys.stderr.write("ERROR! Unknown argument %s\n"%arg)
             exit()
@@ -328,7 +336,7 @@ if __name__=="__main__":
     elif len(file_list)==2: # calculate contact prediction accuracy
         res_pred_list=read_contact_map(file_list[1],
             cutoff_all,cutoff_short,cutoff_medium,cutoff_long,
-            sep_range)
+            sep_range,offset)
         cmp_list=compare_res_contact(res_dist_list,res_pred_list,cutoff)
 
         if not outfmt.startswith("stat"):
