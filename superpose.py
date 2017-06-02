@@ -13,6 +13,8 @@ options:
     -execpath=/usr/bin/TMalign
         Path to executable. default is searching in the same folder of this
         script and then search in $PATH
+    -writePDB={true,false}
+        whether write PDB after superposition
 '''
 import sys,os
 import subprocess
@@ -20,6 +22,9 @@ import re
 import shutil
 from string import Template
 import random
+
+# pattern for LOMETS templates
+initdat_pattern=re.compile("\n\s*\d+\s+[-]{0,1}[.\d]+\s+\d+\s+\w+[\w\W]+?\n")
 
 def sup_pymol(model_pdb,native_pdb, algo="pymol-super",
     execpath="/usr/bin/pymol",check_nmr=True):
@@ -53,10 +58,13 @@ def sup_pymol(model_pdb,native_pdb, algo="pymol-super",
     fp=open(tmp_dir+"model.pdb",'rU')
     txt=fp.read()
     fp.close()
-    if check_nmr and "\nMODEL " in txt:
-        MODEL_start_lst=[e.start()+1 for e in re.finditer('\nMODEL ',txt)]
-        if txt.startswith("MODEL"):
-            MODEL_start_lst=[0]+MODEL_start_lst
+    if check_nmr and ("\nMODEL " in txt or initdat_pattern.search(txt)):
+        if "\nMODEL " in txt:
+            MODEL_start_lst=[e.start()+1 for e in re.finditer('\nMODEL ',txt)]
+            if txt.startswith("MODEL"):
+                MODEL_start_lst=[0]+MODEL_start_lst
+        else:
+            MODEL_start_lst=[e.start()+1 for e in initdat_pattern.finditer(txt)]
 
         super_txt="cd $tmp_dir\nload $native,fix,1\n"
         ce_txt   ="cd $tmp_dir\nload $native,fix,1\n"
@@ -243,10 +251,13 @@ def sup_TMalign(model_pdb,native_pdb, algo="TMalign",
     fp=open(tmp_dir+"model.pdb",'rU')
     txt=fp.read()
     fp.close()
-    if check_nmr and "\nMODEL " in txt:
-        MODEL_start_lst=[e.start()+1 for e in re.finditer('\nMODEL ',txt)]
-        if txt.startswith("MODEL"):
-            MODEL_start_lst=[0]+MODEL_start_lst
+    if check_nmr and ("\nMODEL " in txt or initdat_pattern.search(txt)):
+        if "\nMODEL " in txt:
+            MODEL_start_lst=[e.start()+1 for e in re.finditer('\nMODEL ',txt)]
+            if txt.startswith("MODEL"):
+                MODEL_start_lst=[0]+MODEL_start_lst
+        else:
+            MODEL_start_lst=[e.start()+1 for e in initdat_pattern.finditer(txt)]
         pdb_txt='' #txt[:MODEL_start_lst[0]]
         RMSD_lst=[]
         TMscore_lst=[]
@@ -356,7 +367,7 @@ COLUMNS        DATA TYPE       CONTENTS
     return (pdb_txt,[float(RMSD)],[float(TMscore)])
 
 def superpose(model_pdb="mobile.pdb",native_pdb="target.pdb",
-    algo="TMalign", execpath=''):
+    algo="TMalign", execpath='',writePDB=True):
     '''Superpose "model_pdb" to "native_pdb" '''
     if not execpath: # default path to executables
         if algo.lower().startswith("pymol") or algo=="super":
@@ -383,6 +394,8 @@ def superpose(model_pdb="mobile.pdb",native_pdb="target.pdb",
     else:
         model_fit_pdb=model_pdb_basename[:ext_idx]+"_fit" \
                      +model_pdb_basename[ext_idx:]
+    if not writePDB:
+        return ''
     fp=open(model_fit_pdb,'w')
     fp.write(pdb_txt)
     fp.close()
@@ -392,6 +405,7 @@ def superpose(model_pdb="mobile.pdb",native_pdb="target.pdb",
 if __name__=="__main__":
     algo="TMalign"
     execpath=''
+    writePDB=True
     argv=[]
     for arg in sys.argv[1:]:
         if not arg.startswith('-'):
@@ -401,6 +415,8 @@ if __name__=="__main__":
             algo=arg[len("-algo="):]
         elif arg.startswith('-execpath='):
             execpath=arg[len("-execpath="):]
+        elif arg.startswith('-writePDB='):
+            writePDB=(arg[len("-writePDB="):].lower()=="true")
         else:
             sys.stderr.write("ERROR! Unknown argument "+arg+'\n')
 
@@ -410,4 +426,5 @@ if __name__=="__main__":
 
     native_pdb=argv[-1]
     for model_pdb in argv[:-1]:
-        sys.stdout.write(superpose(model_pdb,native_pdb,algo,execpath)+'\n')
+        sys.stdout.write(superpose(
+            model_pdb,native_pdb,algo,execpath,writePDB)+'\n')
