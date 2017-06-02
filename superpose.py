@@ -281,7 +281,8 @@ def sup_TMalign(model_pdb,native_pdb, algo="TMalign",
                 RMSD_lst.append(RMSD)
                 TMscore_lst.append(TMscore)
 
-                sys.stdout.write('\n')
+                if idx<len(MODEL_start_lst)-1:
+                    sys.stdout.write('\n')
                 #if os.path.isfile(single_model_file):
                     #os.remove(single_model_file)
         if os.path.isdir(tmp_dir):
