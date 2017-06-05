@@ -15,6 +15,8 @@ options:
         script and then search in $PATH
     -writePDB={true,false}
         whether write PDB after superposition
+    -offset=0
+        add "offset" to residue index in model.pdb
 '''
 import sys,os
 import subprocess
@@ -27,13 +29,14 @@ import random
 initdat_pattern=re.compile("\n\s*\d+\s+[-]{0,1}[.\d]+\s+\d+\s+\w+[\w\W]+?\n")
 
 def sup_pymol(model_pdb,native_pdb, algo="pymol-super",
-    execpath="/usr/bin/pymol",check_nmr=True):
+    execpath="/usr/bin/pymol",offset=0,check_nmr=True):
     '''Superpose "model_pdb" to "native_pdb" using pymol
 
     model_pdb  - moved pdb structure
     native_pdb - fixed pdb structure
     algo       - algorithm for supersition {"TMalign","TMscore","MMalign"}
     execpath   - path to TMalign/TMscore/MMalign executable
+    offset     - obsolete parameter.
     check_nmr  - check whether "model_pdb" is multi-model NMR structure
     '''
     tmp_dir="/tmp/"+os.getenv("USER")+'/'+algo+ \
@@ -220,13 +223,14 @@ quit
     return (pdb_txt,[float(RMSD)],[])
 
 def sup_TMalign(model_pdb,native_pdb, algo="TMalign",
-    execpath="/usr/bin/TMalign",check_nmr=True):
+    execpath="/usr/bin/TMalign",offset=0,check_nmr=True):
     '''Superpose "model_pdb" to "native_pdb" using TMalign/TMscore/MMalign
 
     model_pdb  - moved pdb structure
     native_pdb - fixed pdb structure
     algo       - algorithm for supersition {"TMalign","TMscore","MMalign"}
     execpath   - path to TMalign/TMscore/MMalign executable
+    offset     - add "offset" to residue index of model.
     check_nmr  - check whether "model_pdb" is multi-model NMR structure
     '''
     tmp_dir="/tmp/"+os.getenv("USER")+'/'+algo+ \
@@ -246,11 +250,26 @@ def sup_TMalign(model_pdb,native_pdb, algo="TMalign",
         fp=open(tmp_dir+"native.pdb",'w')
         fp.write(txt.split("ENDMDL")[0]+"ENDMDL\n")
         fp.close()
-
-    # Check if model_pdb is multi-model NMR structure
+    
+    # read model pdb
     fp=open(tmp_dir+"model.pdb",'rU')
     txt=fp.read()
     fp.close()
+
+    # reindex residue index
+    if offset!=0:
+        lines=txt.splitlines()
+        txt=""
+        for line in lines:
+            if line.startswith("ATOM  ") or line.startswith("HETATM"):
+                resi=str(int(line[22:26])+offset)
+                line=line[:22]+' '*(4-len(resi))+resi+line[26:]
+            txt+=line+'\n'
+        fp=open(tmp_dir+"model.pdb",'w')
+        fp.write(txt)
+        fp.close()
+
+    # Check if model_pdb is multi-model NMR structure
     if check_nmr and ("\nMODEL " in txt or initdat_pattern.search(txt)):
         if "\nMODEL " in txt:
             MODEL_start_lst=[e.start()+1 for e in re.finditer('\nMODEL ',txt)]
@@ -298,11 +317,18 @@ def sup_TMalign(model_pdb,native_pdb, algo="TMalign",
     stdout,stderr= subprocess.Popen(command, shell=True, 
         stdout = subprocess.PIPE).communicate()
     RMSD_pattern=re.compile("RMSD\s*=\s*([.\d]+)")
-    RMSD=RMSD_pattern.findall(stdout)[-1]
     TMscore_pattern=re.compile("TM-score\s*=\s*([.\d]+)")
-    TMscore=TMscore_pattern.findall(stdout)[-1]
-
-    sys.stdout.write("RMSD="+RMSD+"; TMscore="+TMscore+";")
+    try:
+        RMSD=RMSD_pattern.findall(stdout)[-1]
+        TMscore=TMscore_pattern.findall(stdout)[-1]
+        sys.stdout.write("RMSD="+RMSD+"; TMscore="+TMscore+";")
+    except:
+        RMSD="0.00"
+        TMscore="0.0000"
+        sys.stdout.write("RMSD=0.00; TMscore=0.0000;")
+        if os.path.isdir(tmp_dir):
+            shutil.rmtree(tmp_dir)
+        return ('',[float(RMSD)],[float(TMscore)])
 
     pattern=re.compile("\s[123]"+"\s+[-]{0,1}[.\d]+"*4+"\s*\n")
     m=0
@@ -368,7 +394,7 @@ COLUMNS        DATA TYPE       CONTENTS
     return (pdb_txt,[float(RMSD)],[float(TMscore)])
 
 def superpose(model_pdb="mobile.pdb",native_pdb="target.pdb",
-    algo="TMalign", execpath='',writePDB=True):
+    algo="TMalign", execpath='',writePDB=True,offset=0):
     '''Superpose "model_pdb" to "native_pdb" '''
     if not execpath: # default path to executables
         if algo.lower().startswith("pymol") or algo=="super":
@@ -383,10 +409,10 @@ def superpose(model_pdb="mobile.pdb",native_pdb="target.pdb",
 
     if algo in ("TMscore","TMalign","MMalign"):
         pdb_txt,RMSD_lst,TMscore_lst=sup_TMalign(
-            model_pdb,native_pdb,algo,execpath)
+            model_pdb,native_pdb,algo,execpath,offset)
     elif algo.startswith("pymol-"):
         pdb_txt,RMSD_lst,TMscore_lst=sup_pymol(
-            model_pdb,native_pdb,algo,execpath)
+            model_pdb,native_pdb,algo,execpath,offset)
 
     model_pdb_basename=os.path.basename(model_pdb)
     ext_idx=model_pdb_basename.rfind('.')
@@ -406,6 +432,7 @@ def superpose(model_pdb="mobile.pdb",native_pdb="target.pdb",
 if __name__=="__main__":
     algo="TMalign"
     execpath=''
+    offset=0
     writePDB=True
     argv=[]
     for arg in sys.argv[1:]:
@@ -418,6 +445,8 @@ if __name__=="__main__":
             execpath=arg[len("-execpath="):]
         elif arg.startswith('-writePDB='):
             writePDB=(arg[len("-writePDB="):].lower()=="true")
+        elif arg.startswith("-offset="):
+            offset=int(arg[len("-offset="):])
         else:
             sys.stderr.write("ERROR! Unknown argument "+arg+'\n')
 
@@ -428,4 +457,4 @@ if __name__=="__main__":
     native_pdb=argv[-1]
     for model_pdb in argv[:-1]:
         sys.stdout.write(superpose(
-            model_pdb,native_pdb,algo,execpath,writePDB)+'\n')
+            model_pdb,native_pdb,algo,execpath,writePDB,offset)+'\n')
