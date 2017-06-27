@@ -35,7 +35,9 @@ contact_pdb.py [options] pdb.pdb contact.map
 Options:
     -cutoff=8
 
-    -atom={CA,CB}
+    -atom={CB,CA} atom with which contact is considered.
+        CB - CA for GLY, CB for other 19 AA
+        CA - CA for all 20 AA
 
     -range={all,short,medium,long}
 
@@ -55,6 +57,9 @@ Options:
     -cutoff_long=0.3   # ignore medium range contact prediction p<=0.3
 
     -offset=0    add "offset" to residue index in predicted contact map
+    -infmt={rr,gremlin} input format of contact map
+        rr - CASP RR, NeBcon, or mfDCA format
+        gremlin - matrix of confidence score
 '''
 import sys,os
 import re
@@ -68,7 +73,7 @@ long_range_def=24 # long_range_def  <= separation. 25 in NeBcon/NN-BAYES
 
 def read_contact_map(infile="contact.map",
     cutoff_all=0,cutoff_short=0,cutoff_medium=0,cutoff_long=0,
-    sep_range=str(short_range_def),offset=0):
+    sep_range=str(short_range_def),offset=0,infmt="rr"):
     '''Read NN-BAYES or CASP RR format contact map. return them in a zipped 
     list with 3 fields for each residue pair. 1st field & 2nd filed are for 
     residue indices, and 3rd field is for euclidean distance.
@@ -77,10 +82,30 @@ def read_contact_map(infile="contact.map",
     resi2=[] # residue index 2 list
     p=[] # cscore of contact prediction accuracy list
     fp=open(infile,'rU')
-    txt=fp.read().splitlines()
+    lines=fp.read().strip().splitlines()
     fp.close()
     pattern=re.compile('(^\d+\s+\d+\s+\d+\s+\d+\s+[-+.e\d]+)|(^\d+\s+\d+\s+[-+.e\d]+)|(^\d+\s+[A-Z]\s+\d+\s+[A-Z]\s+[-+.e\d]+\s+[-+.e\d]+)')
-    for line in txt:
+    if infmt!="rr":
+        for i,line in enumerate(lines):
+            for j,cscore in enumerate(line.split()):
+                if (j<=i):
+                    continue
+                seperation=abs(i-j)
+                if (sep_range=="short"  and not \
+                    short_range_def<=seperation<medm_range_def) or \
+                   (sep_range=="medium" and not \
+                    medm_range_def<=seperation<long_range_def) or \
+                   (sep_range=="long"   and not long_range_def<=seperation):
+                    continue
+                elif not sep_range in ["all","short","medium","long"] \
+                    and seperation<int(sep_range):
+                    continue
+                resi1.append(i+1)
+                resi2.append(j+1)
+                p.append(float(cscore))
+        return zip(resi1,resi2,p)
+
+    for line in lines:
         if not line.strip(): # skip empty lines
             continue
         match_list=pattern.findall(line.strip())
@@ -88,7 +113,7 @@ def read_contact_map(infile="contact.map",
             continue
         line=[line for line in match_list[0] if line.strip()][0].split()
         if len(line)==6:
-            line=[line[0],line[2],line[4]]
+            line=[line[0],line[2],line[5]]
         if not len(line) in (3,5):
             continue
 
@@ -243,7 +268,8 @@ def calc_acc_contact(cmp_list,L,sep_range=str(short_range_def)):
     for key in top_pred:
         if top_pred[key]:
             ACC[key]=1.*len([e for e in top_pred[key] if e[3]=="TRUE"]
-                )/len(top_pred[key])
+                )/int(L/float(key.lstrip("shortmedmlongall")))
+                #)/len(top_pred[key])
         else:
             ACC[key]=0 # error
     return ACC,top_pred
@@ -284,8 +310,8 @@ if __name__=="__main__":
         sys.stderr.write(docstring)
         exit()
 
-    atom_sele="CA"
-    cutoff=0
+    atom_sele="CB"
+    cutoff=8
     outfmt="list"
     sep_range=str(short_range_def) # "6"
     cutoff_all   =0
@@ -293,6 +319,7 @@ if __name__=="__main__":
     cutoff_medium=0
     cutoff_long  =0
     offset  =0
+    infmt="rr"
     for arg in sys.argv[1:]:
         if arg.startswith("-cutoff="):
             cutoff=float(arg[len("-cutoff="):])
@@ -304,6 +331,8 @@ if __name__=="__main__":
                 sep_range="medium"
         elif arg.startswith("-outfmt="):
             outfmt=arg[len("-outfmt="):]
+        elif arg.startswith("-infmt="):
+            infmt=arg[len("-infmt="):]
         elif arg.startswith("-cutoff_all="):
             cutoff_all=float(arg[len("-cutoff_all="):])
         elif arg.startswith("-cutoff_short="):
@@ -338,7 +367,7 @@ if __name__=="__main__":
     elif len(file_list)==2: # calculate contact prediction accuracy
         res_pred_list=read_contact_map(file_list[1],
             cutoff_all,cutoff_short,cutoff_medium,cutoff_long,
-            sep_range,offset)
+            sep_range,offset,infmt)
         cmp_list=compare_res_contact(res_dist_list,res_pred_list,cutoff)
 
         if not outfmt.startswith("stat"):
