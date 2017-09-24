@@ -1,6 +1,6 @@
 #!/bin/bash
 # grep Gene Ontology code
-PATTERN="GO[:][\d]{7}"
+PATTERN="\bGO[:][\d]{7}\b"
 if [ $# -eq 0 ];then
     cat|grep -ohP $PATTERN|sort -n |uniq
 else
