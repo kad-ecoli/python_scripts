@@ -355,7 +355,10 @@ def initdat2pdb(sequence='', initdat="init.dat",
     fp.write(">target\n%s\n%s"%(alignment[0],alignment_txt))
     fp.close()
     shutil.copy(alignment_fasta_tmp,prefix+"alignment.fasta")
-    
+
+    ## clean up temporary folder ##
+    if os.path.isdir(tmp_dir):
+        shutil.rmtree(tmp_dir)
     return output_dict
 
 if __name__=="__main__":
@@ -383,7 +386,7 @@ if __name__=="__main__":
         sys.stderr.write(docstring)
         exit()
     
-    sequence='' if len(argv)==1 else read_one_sequence(argv[1])
+    sequence='' if len(argv)==1 else read_one_sequence(argv[0])
 
     if str(good).lower()=="true":
         good=argv[-1][argv[-1].rfind('.')+1:]
