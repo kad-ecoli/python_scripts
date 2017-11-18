@@ -6,9 +6,12 @@ import sys
 def fasta2len(infile="seq.fasta"):
     '''calculat the length of each entry in the input fasta file "infile"'''
     len_txt=''
-    fp=open(infile,'rU')
-    txt=fp.read()
-    fp.close()
+    if infile=='-':
+        txt=sys.stdin.read()
+    else:
+        fp=open(infile,'rU')
+        txt=fp.read()
+        fp.close()
     for block in txt.split('>'):
         block=block.strip()
         if not block:
