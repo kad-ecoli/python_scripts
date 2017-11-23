@@ -13,7 +13,8 @@ Options:
     -outfmt={list,dist,plot} output format:
         "list": tab-eliminated list listing residue index for contact pairs
         "dist": tab-eliminated list listing residue distances for all pairs
-        "plot": a matplotlib plot visualizing contacts, not implemented
+        "stat": statistics on number of contacts at short/medm/long/all
+                range and protein length L
 
     -range={all,short,medium,long} sequences seperation range x
         "all":     1<=x
@@ -274,6 +275,17 @@ def calc_acc_contact(cmp_list,L,sep_range=str(short_range_def)):
             ACC[key]=0 # error
     return ACC,top_pred
 
+def calc_contact_num(res_con_list,L):
+    ''' calculate the number of contacts at different range '''
+    con_num_dict={"short":0,"medm":0,"long":0,"all":len(res_con_list),"L":L}
+    for resi1,resi2,dist in res_con_list:
+        con_num_dict["short"]+=(
+            short_range_def<=abs(resi2-resi1)<medm_range_def)
+        con_num_dict["medm"]+=(
+            medm_range_def<=abs(resi2-resi1)<long_range_def)
+        con_num_dict["long"]+=(
+            long_range_def<=abs(resi2-resi1))
+    return con_num_dict
 
 def calc_res_contact(res_dist_list,sep_range=str(short_range_def),cutoff=8):
     '''Calculate residue contacts from "res_dist_list", a zipped list of residue
@@ -354,12 +366,23 @@ if __name__=="__main__":
     res_dist_list=calc_res_dist(file_list[0],atom_sele)
     res_con_list=calc_res_contact(res_dist_list,sep_range,cutoff)
 
+    L=map(list,zip(*res_dist_list))
+    L=L[0]+L[1]
+    L=max(L)-min(L)+1
+
     if len(file_list)==1: # calculate residue contact
         for res_pair in res_con_list:
             if outfmt.startswith("dist"):
                 sys.stdout.write("%d\t%d\t%.1f\n"%(res_pair[0],res_pair[1],res_pair[2]))
             elif outfmt=="list":
                 sys.stdout.write("%d\t%d\n"%(res_pair[0],res_pair[1]))
+        if outfmt=="stat":
+            con_num_dict=calc_contact_num(res_con_list,L)
+            key_list=["short","medm","long","all","L"]
+            sys.stderr.write('\t'.join(key_list)+'\n')
+            sys.stdout.write('\t'.join([str(con_num_dict[key]
+                ) for key in key_list])+'\n')
+            
         if not cutoff and outfmt=="list":
             sys.stderr.write("\nWARNING! cutoff not set\n\n")
 
@@ -379,9 +402,6 @@ if __name__=="__main__":
                     sys.stdout.write("%d\t%d\t%s\t%.3f\n"%(res_pair[0],
                         res_pair[1],res_pair[3],res_pair[4]))
         else: # outfmt=="stat"
-            L=map(list,zip(*res_dist_list))
-            L=L[0]+L[1]
-            L=max(L)-min(L)+1
             ACC,top_pred=calc_acc_contact(cmp_list,L,sep_range)
             if sep_range == "short":
                 key_list=["short1","short2","short5"]
