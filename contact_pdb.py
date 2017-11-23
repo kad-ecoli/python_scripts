@@ -10,7 +10,7 @@ Options:
     -atom={CA,CB} calculate distance between "CA" for all residues, or "CA" for 
         gly and "CB" for other 19 amino acids
 
-    -outfmt={list,dist,plot} output format:
+    -outfmt={list,dist,stat} output format:
         "list": tab-eliminated list listing residue index for contact pairs
         "dist": tab-eliminated list listing residue distances for all pairs
         "stat": statistics on number of contacts at short/medm/long/all
