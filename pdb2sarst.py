@@ -10,6 +10,8 @@ options:
         whether to show secondary structure.
         8 - DSSP 8 state secondary structure assignment
         3 - 3 state secondary structure assignment
+        2 - show the number of helix, strand, coil, all residues 
+            in the sequence header
         1 - just show whether it is random coil (0), all alpha (1), all 
             beta (2), alpha beta (3) protein in the sequence header
         0 - do not show secondary structure assignment
@@ -116,7 +118,15 @@ def runDSSP(infile="pdb.pdb",dssp_path="dssp",pulchra_path="pulchra"):
     p=subprocess.Popen(cmd,shell=True,
         stdout=subprocess.PIPE,stderr=subprocess.PIPE)
     stdout,stderr=p.communicate()
-    if stderr.startswith("DSSP could not be created due to an error:"):
+
+    fp=open(infile,'rU')
+    CA_num=len([line for line in fp.read().split("\nEND")[0].splitlines(
+        ) if (line.startswith("ATOM  ") or line.startswith("HETATM")
+        ) and len(line)>=54 and line[12:16]==" CA " and line[16] in " A"])
+    fp.close()
+
+    #if stderr.startswith("DSSP could not be created due to an error:"):
+    if len(stdout.splitlines())<0.9*CA_num:
         # extract chain ID
         chainID=' '
         fp=open(infile,'rU')
@@ -171,9 +181,12 @@ def parseDSSP(dssp_txt='',show_seq=True,show_ss=8,show_sarst=True,
         ss_type_dict: a dict whose key is chain ID and value is fold type
                    0 - random coil, 1 - all alpha
                    2 - all beta,    3 - alpha+beta alpha/beta
+        ss_num_dict: a dict whose key is chain ID and value is a four element
+                   list, for number of [helix, strand, coil, all] residues
     '''
     dssp_dict=dict()
     ss_type_dict=dict()
+    ss_num_dict=dict()
     for line in dssp_txt.splitlines():
         if len(line)<115:
             continue
@@ -183,6 +196,7 @@ def parseDSSP(dssp_txt='',show_seq=True,show_ss=8,show_sarst=True,
             continue
         if not chainID in dssp_dict:
             dssp_dict[chainID]=['']*sum([show_seq,show_ss>0,show_sarst])
+            ss_num_dict[chainID]=[0]*4
 
         if show_seq:
             dssp_dict[chainID][0]+=AA
@@ -193,6 +207,10 @@ def parseDSSP(dssp_txt='',show_seq=True,show_ss=8,show_sarst=True,
                 SS=SS.replace('I','H').replace('G','H'
                     ).replace('B','E'
                     ).replace('S','C').replace('T','C')
+            ss_num_dict[chainID][0]+=(SS in 'IGH')
+            ss_num_dict[chainID][1]+=(SS in 'BE')
+            ss_num_dict[chainID][2]+=(SS in 'STC')
+            ss_num_dict[chainID][3]+=1
             dssp_dict[chainID][show_seq]+=SS
 
         if show_sarst:
@@ -227,7 +245,7 @@ def parseDSSP(dssp_txt='',show_seq=True,show_ss=8,show_sarst=True,
                 #ss_type_dict[chainID]+=1
             #if set('BE').intersection(dssp_dict[chainID][show_seq]):
                 #ss_type_dict[chainID]+=2
-    return dssp_dict,ss_type_dict
+    return dssp_dict,ss_type_dict,ss_num_dict
 
 if __name__=="__main__":
     show_seq=True
@@ -272,18 +290,22 @@ if __name__=="__main__":
 
     for infile in argv:
         dssp_txt=runDSSP(infile,dssp_path,pulchra_path)
-        dssp_dict,ss_type_dict=parseDSSP(dssp_txt,show_seq,show_ss,show_sarst,
-            fold_type_cutoff)
+        dssp_dict,ss_type_dict,ss_num_dict=parseDSSP(dssp_txt,show_seq,
+            show_ss,show_sarst, fold_type_cutoff)
 
         PDBID=os.path.basename(infile).split('.')[0]
         txt=''
         for chainID in dssp_dict:
             header='>'+PDBID+(':'+chainID)*show_chain
-            if show_ss!=1:
+            if show_ss==1:
+                txt+=header+'\t%d'%ss_type_dict[chainID]+'\n'+''.join(
+                    [line+'\n' for line in dssp_dict[chainID
+                    ][:show_seq]+dssp_dict[chainID][show_seq+1:]])
+            elif show_ss==2:
+                txt+=header+'\t'+'\t'.join(map(str,ss_num_dict[chainID])
+                    )+'\n'+''.join([line+'\n' for line in dssp_dict[chainID
+                    ][:show_seq]+dssp_dict[chainID][show_seq+1:]])
+            else:
                 txt+=header+'\n'+''.join(
                     [line+'\n' for line in dssp_dict[chainID]])
-            else:
-                txt+=header+'\t%d'%ss_type_dict[chainID]+'\n'+''.join(
-                    [line+'\n' for line in \
-                    dssp_dict[chainID][:show_seq]+dssp_dict[chainID][show_seq+1:]])
         sys.stdout.write(txt)
