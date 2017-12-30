@@ -10,7 +10,7 @@ Options:
     -atom={CA,CB} calculate distance between "CA" for all residues, or "CA" for 
         gly and "CB" for other 19 amino acids
 
-    -outfmt={list,dist,stat} output format:
+    -outfmt={stat,list,dist} output format:
         "list": tab-eliminated list listing residue index for contact pairs
         "dist": tab-eliminated list listing residue distances for all pairs
         "stat": statistics on number of contacts at short/medm/long/all
@@ -42,7 +42,7 @@ Options:
 
     -range={all,short,medium,long}
 
-    -outfmt={list,dist,stat} output format:
+    -outfmt={stat,list,dist} output format:
         "list": list showing if predicted contact pairs are TRUE
                 #resi1 resi2 dist TRUE/FALSE p
         "dist": the same as above but actual distance is also reported
@@ -324,7 +324,7 @@ if __name__=="__main__":
 
     atom_sele="CB"
     cutoff=8
-    outfmt="list"
+    outfmt="stat"
     sep_range=str(short_range_def) # "6"
     cutoff_all   =0
     cutoff_short =0
