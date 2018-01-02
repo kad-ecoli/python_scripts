@@ -194,7 +194,7 @@ if __name__=="__main__":
             ] for feat in feat_list])+'\n')
     else:
         Nc_dict=PredNc_from_feat(feat_dict,model,atom)
-        sys.stderr.write('\t'.join(range_list)+'\n')
-        sys.stdout.write('\t'.join(["%.1f"%Nc_dict[sep
-            ] for sep in range_list])+'\n')
+        sys.stderr.write('\t'.join(range_list)+'\tL\n')
+        sys.stdout.write('\t'.join(["%.0f"%Nc_dict[sep
+            ] for sep in range_list]+["%d"%feat_dict["l"]])+'\n')
         
