@@ -7,10 +7,12 @@ PredNc.pl seq.ss2 seq.solv
     Notice that the definition of "long" range is NOT the same as that
     used by NeBcon.
 
+    The second argument is optional for model 4 and 8.
+
 input files:
     seq.ss2  - stage 2 secondary structure prediction by PSIPRED 4.
     seq.solv - solvent accessibility prediction by "solvpred" program
-               from metapsicov.
+               from metapsicov. only necessary for model 1 and 2
 
 option:
     -atom={CB,CA,feat}
@@ -23,9 +25,9 @@ option:
         false - use predicted ss for counting ss composition
 
     -model=1,2,4,8
-        1 - (default) helix, strand, coil, accessibility, bias
+        1 - helix, strand, coil, accessibility, bias
         2 - helix, other (nonhelix), accessibility, bias
-        4 - helix, strand, coil, bias
+        4 - (default) helix, strand, coil, bias
         8 - L, bias
 '''
 
@@ -131,7 +133,9 @@ def get_PredNc_feat(ss_file="seq.ss2",solv_file="seq.solv",use_prob=True):
                 feat_dict["strand"]+=(SS=='E')
                 feat_dict["coil"]+=(SS=='C')
                 feat_dict["other"]+=(SS!='H')
-
+    
+    if not solv_file:
+        return feat_dict
     fp=open(solv_file,'rU')
     txt=fp.read()
     fp.close()
@@ -167,7 +171,7 @@ def PredNc_from_feat(feat_dict,model=1,atom="CA"):
 
 if __name__=="__main__":
     atom="CB"
-    model=1
+    model=4
     use_prob=True # whether to use cscore for psipred
     argv=[]
     for arg in sys.argv[1:]:
@@ -183,9 +187,15 @@ if __name__=="__main__":
         else:
             argv.append(arg)
 
-    if len(argv)!=2:
+    if len(argv)<1:
         sys.stderr.write(docstring)
         exit()
+    elif len(argv)==1:
+        if model in [1,2]:
+            sys.stderr.write("FATAL ERROR! no solv for model %d"%model)
+            exit()
+        else:
+            argv.append('')
 
     feat_dict=get_PredNc_feat(argv[0],argv[1],use_prob)
     if atom=="feat":
@@ -197,4 +207,3 @@ if __name__=="__main__":
         sys.stderr.write('\t'.join(range_list)+'\tL\n')
         sys.stdout.write('\t'.join(["%.0f"%Nc_dict[sep
             ] for sep in range_list]+["%d"%feat_dict["l"]])+'\n')
-        
