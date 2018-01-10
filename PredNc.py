@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 docstring='''
-PredNc.pl seq.ss2 seq.solv
+PredNc.py seq.ss2 seq.solv
     predict the number contacts for short (6<=|i-j|<12),
     medium (12<=|i-j|<24), long (24<=|i-j|), and all (6<=|i-j|) range.
 
@@ -29,6 +29,11 @@ option:
         2 - helix, other (nonhelix), accessibility, bias
         4 - (default) helix, strand, coil, bias
         8 - L, bias
+
+    -bound={none,lower,upper}
+        0 - (default) predict target contact number 
+        1 - lower boundary of target contact number 
+        2 - upper boundary of target contact number 
 '''
 
 import sys
@@ -150,12 +155,13 @@ def get_PredNc_feat(ss_file="seq.ss2",solv_file="seq.solv",use_prob=True):
             (ss_file,solv_file))
     return feat_dict
 
-def PredNc_from_feat(feat_dict,model=1,atom="CA"):
+def PredNc_from_feat(feat_dict,model=1,atom="CB",bound="none"):
     ''' predict contact number from features '''
     Nc_dict=dict()
     for sep in range_list:
         Nc_dict[sep]=[]
 
+    L=feat_dict['l']
     for m in sorted(PredNc_dict.keys(),reverse=True):
         if model>=m:
             for s,sep in enumerate(range_list):
@@ -163,16 +169,49 @@ def PredNc_from_feat(feat_dict,model=1,atom="CA"):
                 for f,feat in enumerate(PredNc_dict[m]["feat"]):
                     w=PredNc_dict[m][atom][s][f]
                     Nc_dict[sep][-1]+=w*feat_dict[feat]
+
+                if bound=="upper":
+                    Nc_dict[sep][-1]+=PredNc_dict[m][atom][s][-1]*L
+                elif bound=="lower":
+                    Nc_dict[sep][-1]-=PredNc_dict[m][atom][s][-1]*L
+
+                Nc_dict[sep][-1]=max([0,Nc_dict[sep][-1]])
+                if sep=="short":
+                    if (L<=6):
+                        Nc_dict[sep][-1]=0
+                    elif (7<=L and L<=11):
+                        Nc_dict[sep][-1]=min([Nc_dict[sep][-1],(L-5)*(L-6)/2])
+                    elif (L>=12):
+                        Nc_dict[sep][-1]=min([Nc_dict[sep][-1],6*L-51])
+                elif sep=="medm":
+                    if (L<=11):
+                        Nc_dict[sep][-1]=0
+                    elif (12<=L and L<=23):
+                        Nc_dict[sep][-1]=min([Nc_dict[sep][-1],(L-11)*(L-12)/2])
+                    elif (24<=L):
+                        Nc_dict[sep][-1]=min([Nc_dict[sep][-1],12*L-210])
+                elif sep=="long":
+                    if (L<=24):
+                        Nc_dict[sep][-1]=0
+                    elif (25<=L):
+                        Nc_dict[sep][-1]=min([Nc_dict[sep][-1],(L-24)*(L-23)/2])
+                elif sep=="all":
+                    if (L<=6):
+                        Nc_dict[sep][-1]=0
+                    elif (7<=L):
+                        Nc_dict[sep][-1]=min([Nc_dict[sep][-1],(L-5)*(L-6)/2])
+
             model-=m
 
     for s,sep in enumerate(range_list):
-        Nc_dict[sep]=max([0,sum(Nc_dict[sep])/len(Nc_dict[sep])])
+        Nc_dict[sep]=(1.*sum(Nc_dict[sep]))/len(Nc_dict[sep])
     return Nc_dict
 
 if __name__=="__main__":
     atom="CB"
     model=4
     use_prob=True # whether to use cscore for psipred
+    bound="none"
     argv=[]
     for arg in sys.argv[1:]:
         if arg.startswith("-atom="):
@@ -181,6 +220,8 @@ if __name__=="__main__":
             model=int(arg[len("-model="):])
         elif arg.startswith("-use_prob="):
             use_prob=(arg[len("-use_prob="):].lower()=="true")
+        elif arg.startswith("-bound="):
+            bound=(arg[len("-bound="):].lower())
         elif arg.startswith("-"):
             sys.stderr.write("ERROR! Unknown argument %s\n"%arg)
             exit()
@@ -192,7 +233,7 @@ if __name__=="__main__":
         exit()
     elif len(argv)==1:
         if model in [1,2]:
-            sys.stderr.write("FATAL ERROR! no solv for model %d"%model)
+            sys.stderr.write("FATAL ERROR! no solv for model %d\n"%model)
             exit()
         else:
             argv.append('')
@@ -203,7 +244,7 @@ if __name__=="__main__":
         sys.stdout.write('\t'.join(["%.1f"%feat_dict[feat
             ] for feat in feat_list])+'\n')
     else:
-        Nc_dict=PredNc_from_feat(feat_dict,model,atom)
+        Nc_dict=PredNc_from_feat(feat_dict,model,atom,bound)
         sys.stderr.write('\t'.join(range_list)+'\tL\n')
         sys.stdout.write('\t'.join(["%.0f"%Nc_dict[sep
             ] for sep in range_list]+["%d"%feat_dict["l"]])+'\n')
