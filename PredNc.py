@@ -1,17 +1,20 @@
 #!/usr/bin/env python
 docstring='''
-PredNc.py seq.ss2 seq.solv
+PredNc.py seq.ss2
     predict the number contacts for short (6<=|i-j|<12),
-    medium (12<=|i-j|<24), long (24<=|i-j|), and all (6<=|i-j|) range.
+    medium (12<=|i-j|<24), long (24<=|i-j|), and all (6<=|i-j|) range,
+    using secondary structure prediction "seq.ss2".
 
     Notice that the definition of "long" range is NOT the same as that
     used by NeBcon.
 
-    The second argument is optional for model 4 and 8.
+PredNc.py seq.ss2 seq.solv -model=1
+    Include solvent accessibility prediction file for contact number 
+    prediction. The second argument is not necessary for model 4 and 8.
 
 input files:
     seq.ss2  - stage 2 secondary structure prediction by PSIPRED 4.
-    seq.solv - solvent accessibility prediction by "solvpred" program
+    seq.solv - (optional solvent accessibility prediction by "solvpred" program
                from metapsicov. only necessary for model 1 and 2
 
 option:
@@ -26,14 +29,14 @@ option:
 
     -model=1,2,4,8
         1 - helix, strand, coil, accessibility, bias
-        2 - helix, other (nonhelix), accessibility, bias
         4 - (default) helix, strand, coil, bias
         8 - L, bias
 
-    -bound={none,lower,upper}
-        0 - (default) predict target contact number 
-        1 - lower boundary of target contact number 
-        2 - upper boundary of target contact number 
+    -bound={none,lower,upper,rms}
+        none  - (default) predict target contact number 
+        lower - lower boundary of target contact number 
+        upper - upper boundary of target contact number 
+        rms   - rmse for contact number prediction given length
 '''
 
 import sys
@@ -174,6 +177,12 @@ def PredNc_from_feat(feat_dict,model=1,atom="CB",bound="none"):
                     Nc_dict[sep][-1]+=PredNc_dict[m][atom][s][-1]*L
                 elif bound=="lower":
                     Nc_dict[sep][-1]-=PredNc_dict[m][atom][s][-1]*L
+                elif bound=="rms":
+                    Nc_dict[sep][-1]=PredNc_dict[m][atom][s][-1]*L
+                    continue
+                elif bound!="none":
+                    sys.stderr.write("ERROR! unknown option -bound=%s\n"%bound)
+                    exit()
 
                 Nc_dict[sep][-1]=max([0,Nc_dict[sep][-1]])
                 if sep=="short":
