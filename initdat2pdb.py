@@ -7,9 +7,9 @@ initdat2pdb.py [options] [seq.txt] init.dat
     sequence will be represented by '-'
 
 outputs:
-    alignment.fasta - multiple sequence alignment
-    template1.pdb, template2.pdb - template structures
-    target1.pdb, target2.pdb       - unrefined target structures
+    alignment.fasta     - multiple sequence alignment
+    template[1-300].pdb - template structures
+    target[1-300].pdb   - query-template alignments
     template.ent - multimodel PDB for all template structures 
     target.ent   - multimodel PDB for all target structures 
 
@@ -25,6 +25,9 @@ options:
         true:  only parse good templates, autodetect threader
         dat:   only parse good templates from init.dat
         threader: only parse good templates from init.threader
+    -template_only=LOMETS_
+        only regenerate the template structures, using "LOMETS"
+        as file suffix.
 '''
 import sys,os
 import shutil
@@ -70,6 +73,8 @@ def split_initdat(initdat="init.dat",templates=0):
     pattern=re.compile("\n\s*\d+\s+[-]{0,1}[.\d]+\s+\d+\s+\w+[\w\W]+?\n")
     # index for start sections of each decoy (except the first section)
     match_index=[e.start()+1 for e in pattern.finditer(txt)]
+    if not match_index:
+        return []
 
     initdat_txt_list=[txt[:match_index[0]]] + \
         [txt[match_index[idx]:match_index[idx+1]] for idx in \
@@ -155,14 +160,22 @@ COLUMNS        DATA TYPE       CONTENTS
             residue_name_short+"    "
             #code_with_modified_residues[line[17:20]]+"    "
 
+        template_residue_name=line[60:63]
+        if not line[60:63].strip():
+            template_residue_name=residue_name
+        template_residue_sequence_number=line[55:59]
+        if not line[55:59].strip():
+            template_residue_sequence_number=residue_sequence_number
+
+
         template_line= \
             record_name                 + \
             atom_serial_number          + \
             atom_name                   + \
             alternate_location_indicator+ \
-            line[60:63]                 + \
+            template_residue_name       + \
             chain_identifier            + \
-            line[55:59]                 + \
+            template_residue_sequence_number + \
             residue_insertion_code      + \
             X_coordinate                + \
             Y_coordinate                + \
@@ -246,7 +259,7 @@ COLUMNS       DATA  TYPE      FIELD        DEFINITION
     return template_pdb_txt,target_pdb_txt,[sequence,template_sequence]
 
 def initdat2pdb(sequence='', initdat="init.dat",
-    prefix='', templates=0, good=False):
+    prefix='', templates=0, good=False, template_only=''):
     '''Convert LOMETS result "initdat" into C-alpha traces
 
     sequence  - target sequence
@@ -258,6 +271,7 @@ def initdat2pdb(sequence='', initdat="init.dat",
                 False: all templates both good and bad
                 "dat": good templates in init.dat
                 threader: good templates in init.threader
+    template_only - whether to generate templates only
 
     return a dictinary "output_dict" for output files
     output_dict["sequence"]  - target sequence
@@ -274,6 +288,10 @@ def initdat2pdb(sequence='', initdat="init.dat",
     
     tmp_dir="/tmp/"+os.getenv("USER")+'/initdat'+prefix+ \
        str(random.randint(1000,9999))+'/'
+    scratch_dir="/scratch/%s/%s"%(os.getenv("USER"),os.getenv("SLURM_JOBID"))
+    if os.getenv("SLURM_JOBID") and os.path.isdir(scratch_dir):
+         tmp_dir=scratch_dir+'/initdat'+prefix+ \
+            str(random.randint(1000,9999))+'/'
     if not os.path.isdir(tmp_dir):
         os.makedirs(tmp_dir)
 
@@ -321,40 +339,58 @@ def initdat2pdb(sequence='', initdat="init.dat",
 
         template_ent_txt+="ENDMDL\n"
         target_ent_txt  +="ENDMDL\n"
+        
+        if not template_only:
+            target_pdb_tmp  =tmp_dir+"target"  +template_idx+".pdb"
+            fp=open(target_pdb_tmp  ,'w')
+            fp.write(target_pdb_txt)
+            fp.close()
+            target_pdb_file  =prefix+"target"  +template_idx+".pdb"
+            shutil.copy(target_pdb_tmp  ,target_pdb_file  )
+            output_dict["target"  ].append(target_pdb_file  )
 
         template_pdb_tmp=tmp_dir+"template"+template_idx+".pdb"
-        target_pdb_tmp  =tmp_dir+"target"  +template_idx+".pdb"
         fp=open(template_pdb_tmp,'w')
         fp.write(template_pdb_txt)
         fp.close()
-        fp=open(target_pdb_tmp   ,'w')
-        fp.write(target_pdb_txt)
-        fp.close()
-        template_pdb_file=prefix+"template"+template_idx+".pdb"
-        target_pdb_file  =prefix+"target"  +template_idx+".pdb"
+        template_pdb_file=prefix+"template"+template_idx+".pdb" \
+            if not template_only else prefix+template_only+template_idx+".pdb"
         shutil.copy(template_pdb_tmp,template_pdb_file)
-        shutil.copy(target_pdb_tmp  ,target_pdb_file  )
-
         output_dict["template"].append(template_pdb_file)
-        output_dict["target"  ].append(target_pdb_file  )
 
     template_ent_txt+="END\n"
     target_ent_txt  +="END\n"
+    if not template_only:
+        fp=open(template_ent_tmp,'w')
+        fp.write(template_ent_txt)
+        fp.close()
+        fp=open(target_ent_tmp  ,'w')
+        fp.write(target_ent_txt)
+        fp.close()
 
-    fp=open(template_ent_tmp,'w')
-    fp.write(template_ent_txt)
-    fp.close()
-    fp=open(target_ent_tmp  ,'w')
-    fp.write(target_ent_txt)
-    fp.close()
+        shutil.copy(template_ent_tmp,prefix+"template.ent")
+        shutil.copy(target_ent_tmp  ,prefix+"target.ent")
 
-    shutil.copy(template_ent_tmp,prefix+"template.ent")
-    shutil.copy(target_ent_tmp  ,prefix+"target.ent")
+    if not len(initdat_txt_list):
+        txt=''
+    else:
+        if not template_only:
+            txt=">target\n%s\n%s"%(alignment[0],alignment_txt)
+        else:
+            txt=">model.pdb\n%s\n"%alignment[0]
+            for b,block in enumerate(alignment_txt.split('>')):
+                if not block.strip():
+                    continue
+                name,sequence=block.splitlines()
+                txt+=">%s%d.pdb\n%s\n"%(template_only,b,sequence)
 
     fp=open(alignment_fasta_tmp,'w')
-    fp.write(">target\n%s\n%s"%(alignment[0],alignment_txt))
+    fp.write(txt)
     fp.close()
-    shutil.copy(alignment_fasta_tmp,prefix+"alignment.fasta")
+    if not template_only:
+        shutil.copy(alignment_fasta_tmp,prefix+"alignment.fasta")
+    else:
+        shutil.copy(alignment_fasta_tmp,prefix+template_only+".fasta")
 
     ## clean up temporary folder ##
     if os.path.isdir(tmp_dir):
@@ -365,6 +401,7 @@ if __name__=="__main__":
     prefix=''
     templates=0
     good=False
+    template_only=''
 
     argv=[]
     for arg in sys.argv[1:]:
@@ -375,6 +412,9 @@ if __name__=="__main__":
             prefix=arg[len("-prefix="):]
         elif arg.startswith("-templates="):
             templates=int(arg[len("-templates="):])
+        elif arg.startswith("-template_only="):
+            template_only=arg[len("-template_only="):
+                ].strip('"').strip("'")
         elif arg.startswith("-good="):
             if arg[len("-good="):].lower()!="false":
                 good=arg[len("-good="):]
@@ -391,5 +431,5 @@ if __name__=="__main__":
     if str(good).lower()=="true":
         good=argv[-1][argv[-1].rfind('.')+1:]
 
-    initdat2pdb(sequence=sequence,initdat=argv[-1],
-        prefix='',templates=templates,good=good)
+    initdat2pdb(sequence=sequence,initdat=argv[-1],prefix='',
+        templates=templates,good=good,template_only=template_only)
