@@ -156,7 +156,7 @@ COLUMNS        DATA TYPE       CONTENTS
 
         template_segment=line[54:59]+ \
             code_with_modified_residues[line[60:63]]+"    " \
-            if len(line)>=63 else "          "
+            if line[60:63].strip() else "          "
         target_segment=line[21:26]+ \
             residue_name_short+"    "
             #code_with_modified_residues[line[17:20]]+"    "
@@ -216,7 +216,7 @@ COLUMNS        DATA TYPE       CONTENTS
         sequence=sequence[:resi]+residue_name_short+sequence[resi+1:]
 
         template_sequence+='-'*(resi-len(template_sequence))
-        if len(line)>=63:
+        if line[60:63].strip():
             template_sequence=template_sequence[:resi]+ \
                 code_with_modified_residues[line[60:63]]+template_sequence[resi+1:]
         else:
