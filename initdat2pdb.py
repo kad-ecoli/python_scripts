@@ -102,6 +102,7 @@ def convert_initdat_txt(sequence='',initdat_txt='',CONECT=False):
     template_pdb_txt=''
     target_pdb_txt=''
     template_sequence=''
+    template_line=''
     for line in initdat_txt.splitlines():
         if not line.strip():
             continue
@@ -163,9 +164,12 @@ COLUMNS        DATA TYPE       CONTENTS
         template_residue_name=line[60:63]
         if not line[60:63].strip():
             template_residue_name=residue_name
-        template_residue_sequence_number=line[55:59]
+        template_resi=line[55:59]
         if not line[55:59].strip():
-            template_residue_sequence_number=residue_sequence_number
+            template_resi=residue_sequence_number
+        if template_line and int(template_resi)<=int(template_line[22:26]):
+            template_resi=str(1+int(template_line[22:26]))
+            template_resi=' '*(4-len(template_resi))+template_resi
 
 
         template_line= \
@@ -175,7 +179,7 @@ COLUMNS        DATA TYPE       CONTENTS
             alternate_location_indicator+ \
             template_residue_name       + \
             chain_identifier            + \
-            template_residue_sequence_number + \
+            template_resi               + \
             residue_insertion_code      + \
             X_coordinate                + \
             Y_coordinate                + \
