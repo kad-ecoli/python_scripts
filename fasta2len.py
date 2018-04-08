@@ -12,7 +12,7 @@ def fasta2len(infile="seq.fasta"):
         fp=open(infile,'rU')
         txt=fp.read()
         fp.close()
-    for block in txt.split('>'):
+    for block in ('\n'+txt).split('\n>'):
         block=block.strip()
         if not block:
             continue
