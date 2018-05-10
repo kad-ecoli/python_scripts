@@ -5,11 +5,15 @@ batch_retrieval.py list uniprot.fasta
     output fetch result to "uniprot.fasta"
 
 Options:
-    -outfmt={fasta,txt,tab,xml,rdf,list,html}
+    -outfmt={fasta,txt,tab,xml,rdf,list,html,gaf,gpad,tsv}
         output format. default "fasta"
         If output format is "fasta", update output fetch result by adding
         new entries into output fetch result.
-        Otherwise, overwrite output fetch result
+        Otherwise, overwrite output fetch result.
+
+        If output format is gaf, gpad or tsv, retrieve the Gene Ontology
+        for respective entries. In this case, -infmt must be ACC. 
+        -db is ignored.
 
     -infmt={ACC+ID,ACC,ID,UPARC,NF50,NF90,NF100,GENENAME,...}
         input format. default 'ACC' (uniprot accession). See
@@ -31,6 +35,11 @@ email = "zcx@umich.edu"
 # uniprot cannot parse very long list. If given a long list, the full query
 # list will be splitted into small lists of "split_size" entries
 split_size=20000
+
+from string import Template
+import requests
+
+requestURL = "https://www.ebi.ac.uk/QuickGO/services/annotation/downloadSearch?limit=100&geneProductId=UniProtKB:"
 
 def batch_retrival(query_list=[],infmt="ACC",outfmt="fasta",db=''):
     '''
@@ -96,6 +105,25 @@ def remove_entry_in_fasta_file(query_list,fasta_file):
     query_list=list(set(query_list).difference(fasta_header_list))
     return query_list
 
+def request_GO(query,outfmt="gaf"):
+    ''' request gpad or gaf format GO annotation '''
+    page=''
+    txt=''
+    p=1
+    while p:
+        r = requests.get("%s%s&page=%d"%(requestURL,query,p),
+            headers={ "Accept" : "text/"+outfmt})
+        if not r.ok:
+            r.raise_for_status()
+        responseBody = ''.join([line+'\n' for line in str(r.text
+            ).splitlines() if line.startswith("UniProtKB")])
+        if responseBody==txt:
+            break
+        txt=str(responseBody)
+        page+=responseBody
+        p+=1
+    return page
+
 if __name__=="__main__":
     infmt="ACC"        # input uniprot accessions
     outfmt="fasta"     # output fasta sequences
@@ -129,28 +157,40 @@ if __name__=="__main__":
     fp.close()
     sys.stdout.write("%u query entries\n"%len(query_list))
 
-    if db:
-        if infmt=="ACC":
-            query_list=remove_entry_not_in_fasta_file(query_list,db)
-            sys.stdout.write("%u query entries in db\n"%len(query_list))
-
-    if outfmt=="fasta":
-        if infmt=="ACC":
-            query_list=remove_entry_in_fasta_file(query_list,argv[1])
-            sys.stdout.write("%u query entries not fetched\n"%len(query_list))
-        fp=open(argv[1],'a')
-    else:
+    if outfmt in ["gaf","gpad","tsv"]:
+        if infmt!="ACC":
+            sys.stderr.write("ERROR! -infmt must be 'ACC' when -outfmt=gaf")
+            exit()
+        if db:
+            sys.stderr.write("WARNING! ignore -db because -outfmt=gaf")
         fp=open(argv[1],'w')
-    for i in range(0,len(query_list),split_size):
-        sys.stdout.write("Retrieving entries %u-%u\n"%(
-            i+1,min(i+split_size,len(query_list))))
-        while (True): # keep trying to retrieve entry until success
-            try:
-                page=batch_retrival(query_list[i:i+split_size],
-                    infmt,outfmt,db)
-                fp.write(page)
-                fp.flush()
-                break
-            except Exception,error:
-                sys.stderr.write(str(error)+'\n')
+        for query in query_list:
+            page=request_GO(query,outfmt)
+            fp.write(page)
+            fp.flush()
+    else:
+        if db:
+            if infmt=="ACC":
+                query_list=remove_entry_not_in_fasta_file(query_list,db)
+                sys.stdout.write("%u query entries in db\n"%len(query_list))
+
+        if outfmt=="fasta":
+            if infmt=="ACC":
+                query_list=remove_entry_in_fasta_file(query_list,argv[1])
+                sys.stdout.write("%u query entries not fetched\n"%len(query_list))
+            fp=open(argv[1],'a')
+        else:
+            fp=open(argv[1],'w')
+        for i in range(0,len(query_list),split_size):
+            sys.stdout.write("Retrieving entries %u-%u\n"%(
+                i+1,min(i+split_size,len(query_list))))
+            while (True): # keep trying to retrieve entry until success
+                try:
+                    page=batch_retrival(query_list[i:i+split_size],
+                        infmt,outfmt,db)
+                    fp.write(page)
+                    fp.flush()
+                    break
+                except Exception,error:
+                    sys.stderr.write(str(error)+'\n')
     fp.close()
