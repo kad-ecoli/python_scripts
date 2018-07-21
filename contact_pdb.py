@@ -82,7 +82,7 @@ def read_contact_map(infile="contact.map",
     resi1=[] # residue index 1 list
     resi2=[] # residue index 2 list
     p=[] # cscore of contact prediction accuracy list
-    fp=open(infile,'rU')
+    fp=open(infile,'rU') if infile!='-' else sys.stdin
     lines=fp.read().strip().splitlines()
     fp.close()
     pattern=re.compile('(^\d+\s+\d+\s+\d+\s+\d+\s+[-+.e\d]+)|(^\d+\s+\d+\s+[-+.e\d]+)|(^\d+\s+[A-Z]\s+\d+\s+[A-Z]\s+[-+.e\d]+\s+[-+.e\d]+)')
@@ -152,7 +152,7 @@ def calc_res_dist(infile="pdb.pdb",atom_sele="CA"):
     atom_sele - select atoms whose euclidean distances are to be calculated
         "CA" for alpha carbon
         "CB" for alpha carbon in gly in beta carbon in all other amino acids'''
-    fp=open(infile,'rU')
+    fp=open(infile,'rU') if infile!='-' else sys.stdin
     struct=fp.read().split("ENDMDL")[0] # first model only
     fp.close()
 
@@ -332,6 +332,7 @@ if __name__=="__main__":
     cutoff_long  =0
     offset  =0
     infmt="rr"
+    file_list=[]
     for arg in sys.argv[1:]:
         if arg.startswith("-cutoff="):
             cutoff=float(arg[len("-cutoff="):])
@@ -355,10 +356,10 @@ if __name__=="__main__":
             cutoff_long=float(arg[len("-cutoff_long="):])
         elif arg.startswith("-offset="):
             offset=int(arg[len("-offset="):])
-        elif arg.startswith("-"):
+        elif arg.startswith("-") and len(arg)>1:
             sys.stderr.write("ERROR! Unknown argument %s\n"%arg)
             exit()
-    file_list=[arg for arg in sys.argv[1:] if not arg.startswith("-")]
+        file_list.append(arg)
     if not file_list:
         sys.stderr.write(docstring+"\nERROR! No PDB file")
         exit()
@@ -423,4 +424,4 @@ if __name__=="__main__":
 
 
     else:
-        sys.stderr,write(docstring+"ERROR! Too many arguments.\n")
+        sys.stderr.write(docstring+"ERROR! Too many arguments.\n")
