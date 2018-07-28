@@ -64,6 +64,7 @@ Options:
 '''
 import sys,os
 import re
+import gzip
 
 # see http://predictioncenter.org/casp12/doc/rr_help.html for contact range
 # defination. Note that NeBcon/NN-BAYES uses different defination for long
@@ -82,7 +83,12 @@ def read_contact_map(infile="contact.map",
     resi1=[] # residue index 1 list
     resi2=[] # residue index 2 list
     p=[] # cscore of contact prediction accuracy list
-    fp=open(infile,'rU') if infile!='-' else sys.stdin
+    fp=sys.stdin
+    if infile!='-':
+        if infile.endswith(".gz"):
+            fp=gzip.open(infile,'rU')
+        else:
+            fp=open(infile,'rU')
     lines=fp.read().strip().splitlines()
     fp.close()
     pattern=re.compile('(^\d+\s+\d+\s+\d+\s+\d+\s+[-+.e\d]+)|(^\d+\s+\d+\s+[-+.e\d]+)|(^\d+\s+[A-Z]\s+\d+\s+[A-Z]\s+[-+.e\d]+\s+[-+.e\d]+)')
@@ -152,7 +158,12 @@ def calc_res_dist(infile="pdb.pdb",atom_sele="CA"):
     atom_sele - select atoms whose euclidean distances are to be calculated
         "CA" for alpha carbon
         "CB" for alpha carbon in gly in beta carbon in all other amino acids'''
-    fp=open(infile,'rU') if infile!='-' else sys.stdin
+    fp=sys.stdin
+    if infile!='-':
+        if infile.endswith(".gz"):
+            fp=gzip.open(infile,'rU')
+        else:
+            fp=open(infile,'rU')
     struct=fp.read().split("ENDMDL")[0] # first model only
     fp.close()
 
