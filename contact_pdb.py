@@ -61,9 +61,10 @@ Options:
     -cutoff_long=0.3   # ignore medium range contact prediction p<=0.3
 
     -offset=0    add "offset" to residue index in predicted contact map
-    -infmt={rr,gremlin} input format of contact map
-        rr - CASP RR, NeBcon, or mfDCA format
+    -infmt={rr,gremlin,pdb} input format of contact map
+        rr      - CASP RR, NeBcon, or mfDCA format
         gremlin - matrix of confidence score
+        pdb     - pdb coordinate file
 '''
 import sys,os
 import re
@@ -75,6 +76,18 @@ import gzip
 short_range_def=6 # short_range_def <= separation < medm_range_def
 medm_range_def=12 # medm_range_def  <= separation < long_range_def
 long_range_def=24 # long_range_def  <= separation. 25 in NeBcon/NN-BAYES
+
+def read_pseudo_contact_map(infile="model1.pdb",atom_sele="CB",
+    cutoff=8, sep_range=str(short_range_def),offset=0):
+    res_dist_list=calc_res_dist(infile,atom_sele)
+    res_con_list=calc_res_contact(res_dist_list,sep_range,cutoff)
+    resi1,resi2,p=map(list,zip(*res_con_list))
+    for i in range(len(res_con_list)):
+        resi1[i]+=offset
+        resi2[i]+=offset
+        p[i]=1-1.*p[i]/cutoff
+    p,resi1,resi2=map(list,zip(*sorted(zip(p,resi1,resi2),reverse=True)))
+    return zip(resi1,resi2,p)
 
 def read_contact_map(infile="contact.map",
     cutoff_all=0,cutoff_short=0,cutoff_medium=0,cutoff_long=0,
@@ -435,9 +448,13 @@ if __name__=="__main__":
 
 
     elif len(file_list)==2: # calculate contact prediction accuracy
-        res_pred_list=read_contact_map(file_list[1],
-            cutoff_all,cutoff_short,cutoff_medium,cutoff_long,
-            sep_range,offset,infmt)
+        if infmt!="pdb":
+            res_pred_list=read_contact_map(file_list[1],
+                cutoff_all,cutoff_short,cutoff_medium,cutoff_long,
+                sep_range,offset,infmt)
+        else:
+            res_pred_list=read_pseudo_contact_map(file_list[1],atom_sele,
+                cutoff, sep_range, offset)
         cmp_list=compare_res_contact(res_dist_list,res_pred_list,cutoff)
 
         if not outfmt.startswith("stat") and not outfmt.startswith("lnat"):
