@@ -51,6 +51,9 @@ Options:
                 contact ACC for top L/2, L=protein length)
                 #short1 short2 short5 medm1 medm2 medm5 long1 long2 long5
                     all1 all2 all5
+        "lnat": statistics on accuracy (ACC): (contact ACC for top Lnative, 
+                where Lnative is the number of native contacts)
+                #short medm long all
 
     -cutoff_all=0      # ignore contact prediction p<=0
     -cutoff_short=0.5  # ignore short  range contact prediction p<=0.5
@@ -248,6 +251,37 @@ def compare_res_contact(res_dist_list,res_pred_list,cutoff=8):
     cmp_list=zip(resi1,resi2,dist,contact,p)
     return cmp_list
 
+def calc_lnat_acc_contact(cmp_list,con_num_dict,sep_range=str(short_range_def)):
+    '''Calculate residue contact accuracy using ouput if "compare_res_contact"
+    and native contact number diction "con_num_dict" '''
+    top_pred=dict() # top short, medm, long, all prediction
+    
+    if not sep_range in ["medium","long"]:
+        top_pred["short"]=[res_pair for res_pair in cmp_list if \
+            short_range_def<=abs(res_pair[0]-res_pair[1])<medm_range_def
+            ][:con_num_dict["short"]]
+
+    if not sep_range in ["short","long"]:
+        top_pred["medm" ]=[res_pair for res_pair in cmp_list if \
+            medm_range_def<=abs(res_pair[0]-res_pair[1])<long_range_def
+            ][:con_num_dict["medm"]]
+
+    if not sep_range in ["short","medium"]:
+        top_pred["long" ]=[res_pair for res_pair in cmp_list if \
+            long_range_def<=abs(res_pair[0]-res_pair[1])
+            ][:con_num_dict["long"]]
+
+    if not sep_range in ["short","medium","long"]:
+        top_pred["all"  ]=cmp_list[:con_num_dict["all"]]
+
+    ACC=dict() # accuracy
+    for key in top_pred:
+        ACC[key]=0
+        if top_pred[key]:
+            ACC[key]=1.*len([e for e in top_pred[key] if e[3]=="TRUE"]
+                )/con_num_dict[key]
+    return ACC,top_pred
+
 def calc_acc_contact(cmp_list,L,sep_range=str(short_range_def)):
     '''Calculate residue contact accuracy using ouput if "compare_res_contact"
     and length of protein 'L" '''
@@ -370,7 +404,8 @@ if __name__=="__main__":
         elif arg.startswith("-") and len(arg)>1:
             sys.stderr.write("ERROR! Unknown argument %s\n"%arg)
             exit()
-        file_list.append(arg)
+        else:
+            file_list.append(arg)
     if not file_list:
         sys.stderr.write(docstring+"\nERROR! No PDB file")
         exit()
@@ -388,7 +423,7 @@ if __name__=="__main__":
                 sys.stdout.write("%d\t%d\t%.1f\n"%(res_pair[0],res_pair[1],res_pair[2]))
             elif outfmt=="list":
                 sys.stdout.write("%d\t%d\n"%(res_pair[0],res_pair[1]))
-        if outfmt=="stat":
+        if outfmt.startswith("stat") or outfmt.startswith("lnat"):
             con_num_dict=calc_contact_num(res_con_list,L)
             key_list=["short","medm","long","all","L"]
             sys.stderr.write('\t'.join(key_list)+'\n')
@@ -405,7 +440,7 @@ if __name__=="__main__":
             sep_range,offset,infmt)
         cmp_list=compare_res_contact(res_dist_list,res_pred_list,cutoff)
 
-        if not outfmt.startswith("stat"):
+        if not outfmt.startswith("stat") and not outfmt.startswith("lnat"):
             for res_pair in cmp_list: #resi1,resi2,dist,contact,p
                 if outfmt.startswith("dist"):
                     sys.stdout.write("%d\t%d\t%.1f\t%s\t%.3f\n"%(res_pair[0],
@@ -413,6 +448,20 @@ if __name__=="__main__":
                 elif outfmt=="list":
                     sys.stdout.write("%d\t%d\t%s\t%.3f\n"%(res_pair[0],
                         res_pair[1],res_pair[3],res_pair[4]))
+        elif outfmt.startswith("lnat"):
+            con_num_dict=calc_contact_num(res_con_list,L)
+            ACC,top_pred=calc_lnat_acc_contact(cmp_list,con_num_dict,sep_range)
+            if sep_range == "short":
+                key_list=["short"]
+            elif sep_range == "medium":
+                key_list=["medm"]
+            elif sep_range == "long":
+                key_list=["long"]
+            else:
+                key_list=["short", "medm", "long", "all"]
+            sys.stderr.write('\t'.join(key_list)+'\n')
+            sys.stdout.write('\t'.join(['%.3f'%ACC[key] for key in key_list]
+                )+'\n')
         else: # outfmt=="stat"
             ACC,top_pred=calc_acc_contact(cmp_list,L,sep_range)
             if sep_range == "short":
