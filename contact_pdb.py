@@ -81,6 +81,8 @@ def read_pseudo_contact_map(infile="model1.pdb",atom_sele="CB",
     cutoff=8, sep_range=str(short_range_def),offset=0):
     res_dist_list=calc_res_dist(infile,atom_sele)
     res_con_list=calc_res_contact(res_dist_list,sep_range,cutoff)
+    if len(res_con_list)==0:
+        return zip([],[],[])
     resi1,resi2,p=map(list,zip(*res_con_list))
     for i in range(len(res_con_list)):
         resi1[i]+=offset
