@@ -84,7 +84,7 @@ def pdbbundle2seq(tarball_name="pdb-bundle.tar.gz",PERMISSIVE="MSE",
         txt=fp.read()
         fp.close()
         header_list_tmp,sequence_list_tmp=pdbtxt2seq(
-            txt,pdb_bundle_name,PERMISSIVE,outfmt,allowX,mol)
+            txt,pdb_bundle_name,PERMISSIVE,outfmt,allowX,False,mol)
         if outfmt=="PDB":
             header_list+=[chain_id_mapping[h] for h \
                 in header_list_tmp]
