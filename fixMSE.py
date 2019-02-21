@@ -45,6 +45,8 @@ code_with_modified_residues = {
     'TYS':'Y', 'TYY':'Y', 'AGM':'R', 'GL3':'G', 'SMC':'C', 'CGU':'E',
     'CSX':'C',
     'SEC':'U', 'PYL':'O', 'ASX':'B', 'GLX':'Z', 'LLP':'X', 'UNK':'X',
+    ' DA':'a', ' DC':'c', ' DG':'g', ' DT':'t', ' DU':'u',
+    '  A':'a', '  C':'c', '  G':'g', '  T':'t', '  U':'u',
     }
 
 aa1to3 = { # 3 letter to 1 letter amino acid code conversion

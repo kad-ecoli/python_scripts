@@ -220,7 +220,7 @@ def pdbtxt2seq(txt='',infile='pdb.pdb',PERMISSIVE="MSE",outfmt="PDB",
                 chain_dict[chain_id]+=tmp_seq
             continue
 
-        if line[13:15]!="CA": # Carbon Alpha Only
+        if line[12:16]!=" CA " and line[12:16]!=" C3'": # Carbon Alpha Only
             continue
         if not line[16] in [' ','A']: # remove alternative location
             continue
