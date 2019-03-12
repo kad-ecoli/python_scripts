@@ -38,7 +38,7 @@ Options:
     -range={all,short,medium,long}
 
     -offset=0    add "offset" to residue index in predicted contact map
-    -infmt={rr,gremlin,pdb} input format of contact map
+    -infmt={res,pdb} input format of contact map
         res     - ResTriplet2
         pdb     - pdb coordinate file
 '''
@@ -67,14 +67,15 @@ def read_pseudo_distance_map(infile="model1.pdb",atom_sele="CB",
     res_con_list=zip(resi1,resi2,p)
     return calc_res_bin(res_con_list)
 
-def read_distance_map(infile="dist.distri",sep_range=str(short_range_def),offset=0):
+def read_distance_map(infile="dist.distri",sep_range=str(short_range_def),
+    offset=0):
     '''Read NN-BAYES or CASP RR format contact map. return them in a zipped 
     list with 3 fields for each residue pair. 1st field & 2nd filed are for 
     residue indices, and 3rd field is for euclidean distance.
     '''
     resi1=[] # residue index 1 list
     resi2=[] # residue index 2 list
-    p=[] # cscore of contact prediction accuracy list
+    p=[] # distance bin of each residue pair
     fp=sys.stdin
     if infile!='-':
         if infile.endswith(".gz"):
@@ -83,42 +84,17 @@ def read_distance_map(infile="dist.distri",sep_range=str(short_range_def),offset
             fp=open(infile,'rU')
     lines=fp.read().strip().splitlines()
     fp.close()
-    pattern=re.compile('(^\d+\s+\d+\s+\d+\s+\d+\s+[-+.e\d]+)|(^\d+\s+\d+\s+[-+.e\d]+)|(^\d+\s+[A-Z]\s+\d+\s+[A-Z]\s+[-+.e\d]+\s+[-+.e\d]+)')
-    if infmt!="rr":
-        for i,line in enumerate(lines):
-            for j,cscore in enumerate(line.split()):
-                if (j<=i):
-                    continue
-                seperation=abs(i-j)
-                if (sep_range=="short"  and not \
-                    short_range_def<=seperation<medm_range_def) or \
-                   (sep_range=="medium" and not \
-                    medm_range_def<=seperation<long_range_def) or \
-                   (sep_range=="long"   and not long_range_def<=seperation):
-                    continue
-                elif not sep_range in ["all","short","medium","long"] \
-                    and seperation<int(sep_range):
-                    continue
-                resi1.append(i+1)
-                resi2.append(j+1)
-                p.append(float(cscore))
-        return zip(resi1,resi2,p)
-
+    pattern=re.compile('^(\d+)\s+(\d+)\s+[.\d]+\s+[.\d]+\s+[.\d]+\s+:' \
+        +"\s+(\d+)"*len(bins)+'$')
     for line in lines:
         if not line.strip(): # skip empty lines
             continue
         match_list=pattern.findall(line.strip())
         if not match_list:
             continue
-        line=[line for line in match_list[0] if line.strip()][0].split()
-        if len(line)==6:
-            line=[line[0],line[2],line[5]]
-        if not len(line) in (3,5):
-            continue
-
-        resi_idx1=int(line[0])+offset # residue index 1
-        resi_idx2=int(line[1])+offset # residue index 2
-        cscore=float(line[-1]) # cscore for contact prediction
+        data=map(float,match_list[0][2:])
+        resi_idx1=int(match_list[0][0])+offset # residue index 1
+        resi_idx2=int(match_list[0][1])+offset # residue index 2
         seperation=abs(resi_idx1-resi_idx2)
 
         if (sep_range=="short"  and not \
@@ -131,15 +107,15 @@ def read_distance_map(infile="dist.distri",sep_range=str(short_range_def),offset
             and seperation<int(sep_range):
             continue
 
-        if cscore<=cutoff_all or \
-          (cscore<=cutoff_short  and seperation<=medm_range_def) or \
-          (cscore<=cutoff_medium and medm_range_def<=seperation<long_range_def
-          ) or (cscore<=cutoff_long and long_range_def<=seperation):
-            continue
-
         resi1.append(resi_idx1)
         resi2.append(resi_idx2)
-        p.append(cscore)
+        p.append(len(bins))
+
+        max_prob=0
+        for b in range(len(bins)):
+            if data[b]>max_prob:
+                p[-1]=int(b)
+                max_prob=data[b]
     return zip(resi1,resi2,p)
 
 def compare_res_contact(res_bin_list,res_pred_list):
@@ -150,7 +126,10 @@ def compare_res_contact(res_bin_list,res_pred_list):
     distance prediction is correct.'''
     cmp_list=[]
     for i,j,b in res_pred_list:
-        cmp_list.append((i,j, (i,j,b) in res_bin_list ))
+        cmp_list.append((i,j, 1.*((i,j,b) in res_bin_list)+ \
+         .75*(((i,j,b+1) in res_bin_list) or ((i,j,b-1) in res_bin_list))+ \
+         .50*(((i,j,b+2) in res_bin_list) or ((i,j,b-2) in res_bin_list))+ \
+         .25*(((i,j,b+3) in res_bin_list) or ((i,j,b-3) in res_bin_list))))
     return cmp_list
 
 def calc_lnat_acc_distance(cmp_list,con_num_dict,sep_range=str(short_range_def)):
@@ -229,7 +208,6 @@ if __name__=="__main__":
     
     res_dist_list=calc_res_dist(file_list[0],atom_sele)
     res_con_list=calc_res_contact(res_dist_list,sep_range,cutoff=bins[-1])
-    #res_con_list=calc_res_contact(res_dist_list,sep_range,cutoff=0)
     res_bin_list=calc_res_bin(res_con_list)
 
     L=map(list,zip(*res_dist_list))
