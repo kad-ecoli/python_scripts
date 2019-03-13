@@ -53,6 +53,8 @@ def split_reptra(infile="rep1.tra1.bz2"):
     pattern=re.compile("\n\s*\d+\s+[-]{0,1}[.\d]+\s+\d+\s+\d+\n")
     # index for start sections of each decoy (except the first section)
     match_index=[e.start()+1 for e in pattern.finditer(txt)]
+    if not match_index:
+        return [txt]
 
     decoy_txt_list=[txt[:match_index[0]]] + \
         [txt[match_index[idx]:match_index[idx+1]] \
