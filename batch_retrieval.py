@@ -75,7 +75,8 @@ def batch_retrival(query_list=[],infmt="ACC",outfmt="fasta",db=''):
     }
 
     data = urllib.urlencode(params)
-    request = urllib2.Request(url_mapping, data)
+    #request = urllib2.Request(url_mapping, data)
+    request = urllib2.Request(url_upload, data)
     request.add_header('User-Agent', 'Python %s' % email)
     response = urllib2.urlopen(request)
     page = response.read()
