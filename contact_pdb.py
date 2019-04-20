@@ -15,6 +15,7 @@ Options:
         "dist": tab-eliminated list listing residue distances for all pairs
         "stat": statistics on number of contacts at short/medm/long/all
                 range and protein length L
+        "npy":  matrix for CNN training
 
     -range={all,short,medium,long} sequences seperation range x
         "all":     1<=x
@@ -424,6 +425,9 @@ if __name__=="__main__":
     if not file_list:
         sys.stderr.write(docstring+"\nERROR! No PDB file")
         exit()
+
+    if outfmt=="npy":
+        sep_range="all"
     
     res_dist_list=calc_res_dist(file_list[0],atom_sele)
     res_con_list=calc_res_contact(res_dist_list,sep_range,cutoff)
@@ -433,17 +437,25 @@ if __name__=="__main__":
     L=max(L)-min(L)+1
 
     if len(file_list)==1: # calculate residue contact
+        if outfmt=="npy":
+            import numpy as np
+            tmap=np.zeros((L,L),dtype=np.float32
+                )+np.diag(np.ones(L,dtype=np.float32))
         for res_pair in res_con_list:
             if outfmt.startswith("dist"):
                 sys.stdout.write("%d\t%d\t%.1f\n"%(res_pair[0],res_pair[1],res_pair[2]))
             elif outfmt=="list":
                 sys.stdout.write("%d\t%d\n"%(res_pair[0],res_pair[1]))
+            elif outfmt=="npy":
+                tmap[res_pair[0]-1][res_pair[1]-1]=1
         if outfmt.startswith("stat") or outfmt.startswith("lnat"):
             con_num_dict=calc_contact_num(res_con_list,L)
             key_list=["short","medm","long","all","L"]
             sys.stderr.write('\t'.join(key_list)+'\n')
             sys.stdout.write('\t'.join([str(con_num_dict[key]
                 ) for key in key_list])+'\n')
+        elif outfmt=="npy":
+            np.save(sys.stdout,tmap.reshape(L*L))
             
         if not cutoff and outfmt=="list":
             sys.stderr.write("\nWARNING! cutoff not set\n\n")
