@@ -447,7 +447,8 @@ if __name__=="__main__":
             elif outfmt=="list":
                 sys.stdout.write("%d\t%d\n"%(res_pair[0],res_pair[1]))
             elif outfmt=="npy":
-                tmap[res_pair[0]-1][res_pair[1]-1]=1
+                tmap[res_pair[0]-1][res_pair[1]-1]= \
+                tmap[res_pair[1]-1][res_pair[0]-1]=1
         if outfmt.startswith("stat") or outfmt.startswith("lnat"):
             con_num_dict=calc_contact_num(res_con_list,L)
             key_list=["short","medm","long","all","L"]
