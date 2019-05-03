@@ -255,7 +255,7 @@ class obo(dict):
             return [v for k,v in self[Aspect]["Term"].items()]
 
         sys.stderr.write("ERROR! Cannot find GO Term %s\n"%Term_id)
-        raise 
+        return []
 
     def has_a(self,Term_id=""):
         '''cumulatively list all child GO id'''
