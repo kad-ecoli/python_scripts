@@ -36,7 +36,10 @@ if __name__=="__main__":
         exit()
 
     for arg in argv:
-        fp=open(arg,'rU')
-        fasta_txt=fp.read()
-        fp.close()
+        if arg=='-':
+            fasta_txt=sys.stdin.read()
+        else:
+            fp=open(arg,'rU')
+            fasta_txt=fp.read()
+            fp.close()
         sys.stdout.write(fasta2pfam(fasta_txt))
