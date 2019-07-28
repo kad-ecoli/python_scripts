@@ -344,8 +344,8 @@ def calc_lnat_acc_dist(cmp_list,con_num_dict,sep_range=str(short_range_def)):
     for key in top_pred:
         ACC[key]=0
         if top_pred[key]:
-            ACC[key]=((sum([e[4]*e[4] for e in top_pred[key]]))**.5
-                )/len(top_pred[key])
+            ACC[key]=(sum([e[4]*e[4] for e in top_pred[key]]
+                )/len(top_pred[key]))**.5
             coef_sigma[key]=sum([e[4]/e[5] for e in top_pred[key]]
                 )/len(top_pred[key])
     return ACC,coef_sigma,top_pred
