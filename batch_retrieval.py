@@ -34,7 +34,7 @@ url_upload = 'http://www.uniprot.org/uploadlists/'
 email = "zcx@umich.edu"
 # uniprot cannot parse very long list. If given a long list, the full query
 # list will be splitted into small lists of "split_size" entries
-split_size=20000
+split_size=10000
 
 from string import Template
 import requests
