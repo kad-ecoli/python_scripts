@@ -28,6 +28,8 @@ strip_sidechain.py # remove side
 DomainParser.py    # partition a PDB chain into domains
 split_uniprot.py   # partition a PDB file into different uniprot ID
 pdb2fasta.py       # convert PDB file to fasta file
+xvg2png.py         # plot gromacs xvf file to png image
+batch_pdb_image.py # gallery view of many pdb files
 
 #### GO parsing ####
 obo2csv.py         # parsing obo format GO defination file

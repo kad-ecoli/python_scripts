@@ -5,7 +5,8 @@ contact_pdb.py [options] pdb.pdb
     Calculate residue contacts in single chain PDB file "pdb.pdb"
 
 Options:
-    -cutoff=8  distance cutoff (in Angstrom) for contact, usu between 6 and 12
+    -cutoff=8  distance cutoff (in Angstrom) for contact
+               default value is 22 for -infmt=dist and 8 otherwise
 
     -atom={CA,CB} calculate distance between "CA" for all residues, or "CA" for 
         gly and "CB" for other 19 amino acids
@@ -15,6 +16,7 @@ Options:
         "dist": tab-eliminated list listing residue distances for all pairs
         "stat": statistics on number of contacts at short/medm/long/all
                 range and protein length L
+        "npy":  matrix for CNN training
 
     -range={all,short,medium,long} sequences seperation range x
         "all":     1<=x
@@ -54,6 +56,7 @@ Options:
         "lnat": statistics on accuracy (ACC): (contact ACC for top Lnative, 
                 where Lnative is the number of native contacts)
                 #short medm long all
+        default value is "lnat" if -infmt=dist, and "stat" otherwise
 
     -cutoff_all=0      # ignore contact prediction p<=0
     -cutoff_short=0.5  # ignore short  range contact prediction p<=0.5
@@ -61,10 +64,11 @@ Options:
     -cutoff_long=0.3   # ignore medium range contact prediction p<=0.3
 
     -offset=0    add "offset" to residue index in predicted contact map
-    -infmt={rr,gremlin,pdb} input format of contact map
+    -infmt={rr,gremlin,pdb,dist} input format of contact map
         rr      - CASP RR, NeBcon, or mfDCA format
         gremlin - matrix of confidence score
         pdb     - pdb coordinate file
+        dist    - fitted distance prediction by ResTriplet2
 '''
 import sys,os
 import re
@@ -81,6 +85,8 @@ def read_pseudo_contact_map(infile="model1.pdb",atom_sele="CB",
     cutoff=8, sep_range=str(short_range_def),offset=0):
     res_dist_list=calc_res_dist(infile,atom_sele)
     res_con_list=calc_res_contact(res_dist_list,sep_range,cutoff)
+    if len(res_con_list)==0:
+        return zip([],[],[])
     resi1,resi2,p=map(list,zip(*res_con_list))
     for i in range(len(res_con_list)):
         resi1[i]+=offset
@@ -88,6 +94,22 @@ def read_pseudo_contact_map(infile="model1.pdb",atom_sele="CB",
         p[i]=1-1.*p[i]/cutoff
     p,resi1,resi2=map(list,zip(*sorted(zip(p,resi1,resi2),reverse=True)))
     return zip(resi1,resi2,p)
+
+def read_distance_map(infile="model1.pdb",offset=0):
+    fp=open(infile,'rU')
+    lines=fp.read().splitlines()
+    fp.close()
+    resi1=[]
+    resi2=[]
+    mu_list=[]
+    sigma_list=[]
+    for line in lines:
+        i,j,mu,sigma=line.split()[:4]
+        resi1.append(int(i)+offset)
+        resi2.append(int(j)+offset)
+        mu_list.append(float(mu))
+        sigma_list.append(float(sigma))
+    return zip(resi1,resi2,mu_list,sigma_list)
 
 def read_contact_map(infile="contact.map",
     cutoff_all=0,cutoff_short=0,cutoff_medium=0,cutoff_long=0,
@@ -264,6 +286,70 @@ def compare_res_contact(res_dist_list,res_pred_list,cutoff=8):
     cmp_list=zip(resi1,resi2,dist,contact,p)
     return cmp_list
 
+
+def compare_res_dist(res_dist_list,dist_pred_list,cutoff=8):
+    '''compare residue distance map "res_dist_list" calculate from pdb to 
+    predicted residue contact "dist_pred_list. return the result in a zipped 
+    list with 6 fields for each pair. 1st field & 2nd filed are for residue  
+    indices, 3rd field is for euclidean distance, 4th field for distance 
+    prediction. 5th field for absolute difference in predicted and native
+    distance. 6th field for predicted deviation.
+    '''
+    res_dist_dict=dict() # key is residue pair, value is distance
+    for i,j,dist in res_dist_list:
+        res_dist_dict[(i,j)]=dist
+    res_pred_dict=dict() # key is residue pair, value is cscore
+    for i,j,mu,sigma in dist_pred_list:
+        res_pred_dict[(i,j)]=(sigma,mu)
+
+    cmp_list=[]
+    for i,j in set(res_dist_dict.keys()).intersection(res_pred_dict.keys()):
+        dist=res_dist_dict[(i,j)]
+        sigma,mu=res_pred_dict[(i,j)]
+        cmp_list.append((sigma,i,j,dist,mu,abs(dist-mu)))
+   
+    #if len(cmp_list)==0:
+        #return []
+
+    # sort on sigma
+    sigma_list,resi1_list,resi2_list,dist_list,mu_list,err_list=map(
+        list,zip(*sorted(cmp_list,reverse=False)))
+    return zip(resi1_list,resi2_list,dist_list,mu_list,err_list,sigma_list)
+
+def calc_lnat_acc_dist(cmp_list,con_num_dict,sep_range=str(short_range_def)):
+    '''Calculate residue contact accuracy using ouput if "compare_res_contact"
+    and native contact number diction "con_num_dict" '''
+    top_pred=dict() # top short, medm, long, all prediction
+    
+    if not sep_range in ["medium","long"]:
+        top_pred["short"]=[res_pair for res_pair in cmp_list if \
+            short_range_def<=abs(res_pair[0]-res_pair[1])<medm_range_def
+            ][:con_num_dict["short"]]
+
+    if not sep_range in ["short","long"]:
+        top_pred["medm" ]=[res_pair for res_pair in cmp_list if \
+            medm_range_def<=abs(res_pair[0]-res_pair[1])<long_range_def
+            ][:con_num_dict["medm"]]
+
+    if not sep_range in ["short","medium"]:
+        top_pred["long" ]=[res_pair for res_pair in cmp_list if \
+            long_range_def<=abs(res_pair[0]-res_pair[1])
+            ][:con_num_dict["long"]]
+
+    if not sep_range in ["short","medium","long"]:
+        top_pred["all"  ]=cmp_list[:con_num_dict["all"]]
+
+    ACC=dict() # dRMSD 
+    coef_sigma=dict() # coeficient of sigma 
+    for key in top_pred:
+        ACC[key]=0
+        if top_pred[key]:
+            ACC[key]=(sum([e[4]*e[4] for e in top_pred[key]]
+                )/len(top_pred[key]))**.5
+            coef_sigma[key]=sum([e[4]/e[5] for e in top_pred[key]]
+                )/len(top_pred[key])
+    return ACC,coef_sigma,top_pred
+
 def calc_lnat_acc_contact(cmp_list,con_num_dict,sep_range=str(short_range_def)):
     '''Calculate residue contact accuracy using ouput if "compare_res_contact"
     and native contact number diction "con_num_dict" '''
@@ -381,8 +467,8 @@ if __name__=="__main__":
         exit()
 
     atom_sele="CB"
-    cutoff=8
-    outfmt="stat"
+    cutoff=0
+    outfmt=""
     sep_range=str(short_range_def) # "6"
     cutoff_all   =0
     cutoff_short =0
@@ -422,6 +508,20 @@ if __name__=="__main__":
     if not file_list:
         sys.stderr.write(docstring+"\nERROR! No PDB file")
         exit()
+
+    if outfmt=="npy":
+        sep_range="all"
+    if cutoff==0:
+        if infmt=="dist":
+            cutoff=22
+        else:
+            cutoff=8
+    if outfmt=="":
+        if infmt=="dist":
+            outfmt="lnat"
+        else:
+            outfmt="stat"
+        
     
     res_dist_list=calc_res_dist(file_list[0],atom_sele)
     res_con_list=calc_res_contact(res_dist_list,sep_range,cutoff)
@@ -431,31 +531,45 @@ if __name__=="__main__":
     L=max(L)-min(L)+1
 
     if len(file_list)==1: # calculate residue contact
+        if outfmt=="npy":
+            import numpy as np
+            tmap=np.zeros((L,L),dtype=np.float32
+                )+np.diag(np.ones(L,dtype=np.float32))
         for res_pair in res_con_list:
             if outfmt.startswith("dist"):
                 sys.stdout.write("%d\t%d\t%.1f\n"%(res_pair[0],res_pair[1],res_pair[2]))
             elif outfmt=="list":
                 sys.stdout.write("%d\t%d\n"%(res_pair[0],res_pair[1]))
+            elif outfmt=="npy":
+                tmap[res_pair[0]-1][res_pair[1]-1]= \
+                tmap[res_pair[1]-1][res_pair[0]-1]=1
         if outfmt.startswith("stat") or outfmt.startswith("lnat"):
             con_num_dict=calc_contact_num(res_con_list,L)
             key_list=["short","medm","long","all","L"]
             sys.stderr.write('\t'.join(key_list)+'\n')
             sys.stdout.write('\t'.join([str(con_num_dict[key]
                 ) for key in key_list])+'\n')
+        elif outfmt=="npy":
+            np.save(sys.stdout,tmap.reshape(L*L))
             
         if not cutoff and outfmt=="list":
             sys.stderr.write("\nWARNING! cutoff not set\n\n")
 
 
     elif len(file_list)==2: # calculate contact prediction accuracy
-        if infmt!="pdb":
+        if infmt=="pdb":
+            res_pred_list=read_pseudo_contact_map(file_list[1],atom_sele,
+                cutoff, sep_range, offset)
+        elif infmt=="dist":
+            dist_pred_list=read_distance_map(file_list[1],offset)
+        else:
             res_pred_list=read_contact_map(file_list[1],
                 cutoff_all,cutoff_short,cutoff_medium,cutoff_long,
                 sep_range,offset,infmt)
+        if infmt=="dist":
+            cmp_list=compare_res_dist(res_dist_list,dist_pred_list)
         else:
-            res_pred_list=read_pseudo_contact_map(file_list[1],atom_sele,
-                cutoff, sep_range, offset)
-        cmp_list=compare_res_contact(res_dist_list,res_pred_list,cutoff)
+            cmp_list=compare_res_contact(res_dist_list,res_pred_list,cutoff)
 
         if not outfmt.startswith("stat") and not outfmt.startswith("lnat"):
             for res_pair in cmp_list: #resi1,resi2,dist,contact,p
@@ -467,19 +581,35 @@ if __name__=="__main__":
                         res_pair[1],res_pair[3],res_pair[4]))
         elif outfmt.startswith("lnat"):
             con_num_dict=calc_contact_num(res_con_list,L)
-            ACC,top_pred=calc_lnat_acc_contact(cmp_list,con_num_dict,sep_range)
-            if sep_range == "short":
-                key_list=["short"]
-            elif sep_range == "medium":
-                key_list=["medm"]
-            elif sep_range == "long":
-                key_list=["long"]
+            if infmt!="dist":
+                ACC,top_pred=calc_lnat_acc_contact(cmp_list,con_num_dict,sep_range)
+                if sep_range == "short":
+                    key_list=["short"]
+                elif sep_range == "medium":
+                    key_list=["medm"]
+                elif sep_range == "long":
+                    key_list=["long"]
+                else:
+                    key_list=["short", "medm", "long", "all"]
+                sys.stderr.write('\t'.join(key_list)+'\n')
+                sys.stdout.write('\t'.join(['%.3f'%ACC[key] for key \
+                    in key_list])+'\n')
             else:
-                key_list=["short", "medm", "long", "all"]
-            sys.stderr.write('\t'.join(key_list)+'\n')
-            sys.stdout.write('\t'.join(['%.3f'%ACC[key] for key in key_list]
-                )+'\n')
-        else: # outfmt=="stat"
+                ACC,coef_sigma,top_pred=calc_lnat_acc_dist(cmp_list,con_num_dict,sep_range)
+                if sep_range == "short":
+                    key_list=["short"]
+                elif sep_range == "medium":
+                    key_list=["medm"]
+                elif sep_range == "long":
+                    key_list=["long"]
+                else:
+                    key_list=["short", "medm", "long", "all"]
+                sys.stderr.write('\t'.join(["stat"]+key_list)+'\n')
+                sys.stdout.write('\t'.join(["drmsd"]+['%.3f'%ACC[key
+                    ] for key in key_list])+'\n')
+                sys.stdout.write('\t'.join(["scoef"]+['%.3f'%coef_sigma[key
+                    ] for key in key_list])+'\n')
+        elif outfmt=="stat":
             ACC,top_pred=calc_acc_contact(cmp_list,L,sep_range)
             if sep_range == "short":
                 key_list=["short1","short2","short5"]

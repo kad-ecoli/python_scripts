@@ -154,7 +154,7 @@ if __name__=="__main__":
     for arg in sys.argv[1:]:
         if arg.startswith("-clean="):
             clean=(arg[len("-clean="):].lower()=="true")
-        elif arg.startswith('-'):
+        elif arg.startswith('-') and len(set(arg[1:])-set(map(str,range(10)))):
             sys.stderr.write("ERROR! Unknown option %s\n"%arg)
             exit()
         else:

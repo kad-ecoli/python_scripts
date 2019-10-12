@@ -270,6 +270,8 @@ def create_UNIPROT_GOterms(uniprot_list=[],GOA_dict=dict(),
             GOterms_Aspect[Aspect]=GOA_dict[Aspect][p]
             if obo_dict: # trace back all parent nodes
                 for Term_id in set(GOterms_Aspect[Aspect]):
+                    if not Term_id in obo_dict[Aspect]["Term"]:
+                        continue
                     GOterms_Aspect[Aspect]+=obo_dict.is_a(Term_id,
                         direct=False,name=False,number=False).split()
             GOterms_Aspect[Aspect]=sorted(set(GOterms_Aspect[Aspect])-excludeGO)

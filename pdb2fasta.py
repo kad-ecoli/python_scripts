@@ -25,6 +25,12 @@ options:
     true  - convert from "SEQRES" entries if present, 
             otherwise convert from "ATOM" entries.
             (For PDB format input only)
+
+-mol={all,protein,rna,dna} which macromolecule type to use
+    all     - use " CA " or " C3'" atoms
+    protein - use " CA " atoms
+    rna     - use " C3'" atoms
+    dna     - use " C3'" atoms, the same as rna
 '''
 import sys,os
 import shutil
@@ -39,10 +45,12 @@ code_standard = {
     'ARG':'R', 'SER':'S', 'THR':'T', 'TYR':'Y', 'HIS':'H',
     'CYS':'C', 'ASN':'N', 'GLN':'Q', 'TRP':'W', 'GLY':'G',
     #'MSE':'M',
+    ' DA':'a', ' DC':'c', ' DG':'g', ' DT':'t',
+    '  A':'a', '  C':'c', '  G':'g', '  T':'u',
     }
 
 def pdbbundle2seq(tarball_name="pdb-bundle.tar.gz",PERMISSIVE="MSE",
-    outfmt="PDB",allowX=True):
+    outfmt="PDB",allowX=True,mol="all"):
     '''convert best effort/minimum PDB bundle to sequence
     '''
     chain_id_mapping=dict()
@@ -76,7 +84,7 @@ def pdbbundle2seq(tarball_name="pdb-bundle.tar.gz",PERMISSIVE="MSE",
         txt=fp.read()
         fp.close()
         header_list_tmp,sequence_list_tmp=pdbtxt2seq(
-            txt,pdb_bundle_name,PERMISSIVE,outfmt,allowX)
+            txt,pdb_bundle_name,PERMISSIVE,outfmt,allowX,False,mol)
         if outfmt=="PDB":
             header_list+=[chain_id_mapping[h] for h \
                 in header_list_tmp]
@@ -90,7 +98,7 @@ def pdbbundle2seq(tarball_name="pdb-bundle.tar.gz",PERMISSIVE="MSE",
     return header_list,sequence_list
 
 def pdb2seq(infile="pdb.pdb", PERMISSIVE="MSE", outfmt="PDB",
-    allowX=True, SEQRES=False):
+    allowX=True, SEQRES=False,mol="all"):
     '''Convert PDB to sequence.
     Return two lists, one for headers and the other for sequence.
 
@@ -100,16 +108,16 @@ def pdb2seq(infile="pdb.pdb", PERMISSIVE="MSE", outfmt="PDB",
         MSE:   (default) Disallow any non-standard amino acid apart from MSE
     '''
     if infile.endswith(".tar.gz"): # best effort/minimum PDB bundle
-        return pdbbundle2seq(infile,PERMISSIVE,outfmt,allowX)
-    elif infile.endswith(".cif") or infile.endswith(".cif.gz"): # PDBx/mmCIF
-        return mmCIF2seq(infile,PERMISSIVE,outfmt,allowX)
+        return pdbbundle2seq(infile,PERMISSIVE,outfmt,allowX,mol)
+    #elif infile.endswith(".cif") or infile.endswith(".cif.gz"): # PDBx/mmCIF
+        #return mmCIF2seq(infile,PERMISSIVE,outfmt,allowX)
     elif infile.endswith(".gz"):
         fp=gzip.open(infile,'rU')
     else:
         fp=open(infile,'rU')
     txt=fp.read()
     fp.close()
-    return pdbtxt2seq(txt,infile,PERMISSIVE,outfmt,allowX,SEQRES)
+    return pdbtxt2seq(txt,infile,PERMISSIVE,outfmt,allowX,SEQRES,mol)
 
 def mmCIF2seq(infile="pdb.cif", PERMISSIVE="MSE",outfmt="PDB",
     allowX=True):
@@ -182,7 +190,7 @@ def mmCIF2seq(infile="pdb.cif", PERMISSIVE="MSE",outfmt="PDB",
     return header_list,sequence_list
 
 def pdbtxt2seq(txt='',infile='pdb.pdb',PERMISSIVE="MSE",outfmt="PDB",
-    allowX=True,SEQRES=False):
+    allowX=True,SEQRES=False,mol="all"):
     '''Convert PDB text "txt" to sequence read from PDB file "infile"
     Return two lists, one for headers and the other for sequence.
 
@@ -194,6 +202,7 @@ def pdbtxt2seq(txt='',infile='pdb.pdb',PERMISSIVE="MSE",outfmt="PDB",
     txt=txt.split("\nENDMDL")[0] # Only the first model
     if not "SEQRES" in txt:
         SEQRES=False # use "ATOM" is "SEQRES" is absent
+    mol=mol.lower()
 
     aa3to1=code_with_modified_residues
     
@@ -220,7 +229,9 @@ def pdbtxt2seq(txt='',infile='pdb.pdb',PERMISSIVE="MSE",outfmt="PDB",
                 chain_dict[chain_id]+=tmp_seq
             continue
 
-        if line[13:15]!="CA": # Carbon Alpha Only
+        if (mol=="protein" and line[12:16]!=" CA ") or \
+           (mol in {"rna","dna"} and line[12:16]!=" C3'") or \
+           (mol=="all" and line[12:16]!=" CA " and line[12:16]!=" C3'"):
             continue
         if not line[16] in [' ','A']: # remove alternative location
             continue
@@ -271,9 +282,9 @@ def pdbtxt2seq(txt='',infile='pdb.pdb',PERMISSIVE="MSE",outfmt="PDB",
 
 
 def pdb2fasta(infile="pdb.pdb", PERMISSIVE="MSE", outfmt="PDB",
-    allowX=True,SEQRES=False):
+    allowX=True,SEQRES=False, mol="all"):
     '''Convert PDB to FASTA'''
-    header_list,sequence_list=pdb2seq(infile,PERMISSIVE,outfmt,allowX,SEQRES)
+    header_list,sequence_list=pdb2seq(infile,PERMISSIVE,outfmt,allowX,SEQRES,mol)
     fasta_list=['>'+header_list[i]+'\n'+ \
                   sequence_list[i] for i in range(len(sequence_list))]
     return '\n'.join(fasta_list)+'\n'
@@ -283,6 +294,7 @@ if __name__=="__main__":
     outfmt="PDB"
     allowX=True
     SEQRES=False
+    mol="all"
     argv=[]
     for arg in sys.argv[1:]:
         if arg.startswith("-outfmt="):
@@ -293,6 +305,8 @@ if __name__=="__main__":
             allowX=(arg[len("-allowX="):].lower()=="true")
         elif arg.startswith("-SEQRES="):
             SEQRES=(arg[len("-SEQRES="):].lower()=="true")
+        elif arg.startswith("-mol="):
+            mol=arg[len("-mol="):].lower()
         elif arg.startswith("-"):
             sys.stderr.write("ERROR! Unknown argument %s\n"%arg)
             exit()
@@ -305,4 +319,4 @@ if __name__=="__main__":
     for pdb in argv:
         sys.stdout.write(pdb2fasta(
             pdb, PERMISSIVE=PERMISSIVE, outfmt=outfmt, allowX=allowX,
-            SEQRES=SEQRES))
+            SEQRES=SEQRES, mol=mol))
