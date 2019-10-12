@@ -8,8 +8,10 @@ superpose.py [options] model.pdb native.pdb
     contains coordinates of "model.pdb" after superposition
 
 options:
-    -algo={TMalign,TMscore,MMalign,pymol-super,pymol-cealign,pymol-align}
+    -algo={TMalign,TMscore,MMalign,pymol-super,pymol-cealign,pymol-align,matrix}
         Algorithm used for superposition. 
+        "matrix" means input TMalign style matrix. In this case, "native.pdb"
+        is the matrix file.
     -execpath=/usr/bin/TMalign
         Path to executable. default is searching in the same folder of this
         script and then search in $PATH
@@ -393,10 +395,118 @@ COLUMNS        DATA TYPE       CONTENTS
 
     return (pdb_txt,[float(RMSD)],[float(TMscore)])
 
+def sup_matrix(model_pdb,matrix_file, offset=0):
+    '''Superpose "model_pdb" to "native_pdb" using TMalign/TMscore/MMalign
+
+    model_pdb  - moved pdb structure
+    native_pdb - fixed pdb structure
+    algo       - algorithm for supersition {"TMalign","TMscore","MMalign"}
+    execpath   - path to TMalign/TMscore/MMalign executable
+    offset     - add "offset" to residue index of model.
+    check_nmr  - check whether "model_pdb" is multi-model NMR structure
+    '''
+    tmp_dir="/tmp/"+os.getenv("USER")+'/'+algo+ \
+       str(random.randint(100000000,999999999))+'/'
+    while(os.path.isdir(tmp_dir)):
+        tmp_dir="/tmp/"+os.getenv("USER")+'/'+algo+ \
+            str(random.randint(100000000,999999999))+'/'
+    os.makedirs(tmp_dir)
+    shutil.copy(model_pdb,tmp_dir+"model.pdb")
+    shutil.copy(matrix_file,tmp_dir+"matrix.txt")
+
+    # read model pdb
+    fp=open(tmp_dir+"model.pdb",'rU')
+    txt=fp.read()
+    fp.close()
+
+    # reindex residue index
+    if offset!=0:
+        lines=txt.splitlines()
+        txt=""
+        for line in lines:
+            if line.startswith("ATOM  ") or line.startswith("HETATM"):
+                resi=str(int(line[22:26])+offset)
+                line=line[:22]+' '*(4-len(resi))+resi+line[26:]
+            txt+=line+'\n'
+        fp=open(tmp_dir+"model.pdb",'w')
+        fp.write(txt)
+        fp.close()
+
+    fp=open(tmp_dir+"matrix.txt",'rU')
+    stdout=fp.read()
+    fp.close()
+
+    pattern=re.compile("^\s*[0123]"+"\s+[-]{0,1}[.\d]+"*4+"\s*$")
+    m=-1
+    t=[0,0,0]
+    u=[[0,0,0] for e in range(3)]
+    for line in stdout.splitlines():
+        matchall=pattern.findall(line)
+        if not matchall:
+            continue
+        m+=1
+        t[m],u[m][0],u[m][1],u[m][2]=map(float,
+            re.split("\s+",line.strip())[1:])
+
+    fp=open(tmp_dir+"model.pdb",'rU')
+    pdb_lines=fp.read().splitlines()
+    fp.close()
+
+    if m<=0:
+        return '\n'.join(pdb_lines)+'\n'
+        
+    
+    ''' Code for rotating Chain_1 from (x,y,z) to (X,Y,Z):
+    do i=1,L
+      X(i)=t(1)+u(1,1)*x(i)+u(1,2)*y(i)+u(1,3)*z(i)
+      Y(i)=t(2)+u(2,1)*x(i)+u(2,2)*y(i)+u(2,3)*z(i)
+      Z(i)=t(3)+u(3,1)*x(i)+u(3,2)*y(i)+u(3,3)*z(i)
+    enddo
+    '''
+    pdb_txt=''
+    for idx,line in enumerate(pdb_lines):
+        if not line.startswith("ATOM  ") and not line.startswith("HETATM"):
+            pdb_txt+=line+'\n'
+            continue
+        x=float(line[30:38])
+        y=float(line[38:46])
+        z=float(line[46:54])
+        X='%.3f'%(t[0]+u[0][0]*x+u[0][1]*y+u[0][2]*z)
+        Y='%.3f'%(t[1]+u[1][0]*x+u[1][1]*y+u[1][2]*z)
+        Z='%.3f'%(t[2]+u[2][0]*x+u[2][1]*y+u[2][2]*z)
+        line=line[:30]+' '*(8-len(X))+X+' '*(8-len(Y))+Y+ \
+                       ' '*(8-len(Z))+Z+line[54:]
+        pdb_txt+=line+'\n'
+        '''
+COLUMNS        DATA TYPE       CONTENTS                            
+-----------------------------------------------------------------------
+ 1 -  6        Record name     "ATOM  "
+ 7 - 11        Integer         Atom serial number.
+13 - 16        Atom            Atom name.
+17             Character       Alternate location indicator.
+18 - 20        Residue name    Residue name.
+22             Character       Chain identifier.
+23 - 26        Integer         Residue sequence number.
+27             AChar           Code for insertion of residues.
+31 - 38        Real(8.3)       Orthogonal coordinates for X in Angstroms.
+39 - 46        Real(8.3)       Orthogonal coordinates for Y in Angstroms.
+47 - 54        Real(8.3)       Orthogonal coordinates for Z in Angstroms.
+55 - 60        Real(6.2)       Occupancy.
+61 - 66        Real(6.2)       Temperature factor (Default = 0.0).
+73 - 76        LString(4)      Segment identifier, left-justified.
+77 - 78        LString(2)      Element symbol, right-justified.
+79 - 80        LString(2)      Charge on the atom.
+        '''
+
+    if os.path.isdir(tmp_dir):
+        shutil.rmtree(tmp_dir)
+
+    return pdb_txt
+
 def superpose(model_pdb="mobile.pdb",native_pdb="target.pdb",
     algo="TMalign", execpath='',writePDB=True,offset=0):
     '''Superpose "model_pdb" to "native_pdb" '''
-    if not execpath: # default path to executables
+    if not execpath and algo!="matrix": # default path to executables
         if algo.lower().startswith("pymol") or algo=="super":
             execpath="pymol"
         else:
@@ -413,6 +523,8 @@ def superpose(model_pdb="mobile.pdb",native_pdb="target.pdb",
     elif algo.startswith("pymol-"):
         pdb_txt,RMSD_lst,TMscore_lst=sup_pymol(
             model_pdb,native_pdb,algo,execpath,offset)
+    elif algo=="matrix":
+        pdb_txt=sup_matrix(model_pdb,native_pdb,offset)
 
     model_pdb_basename=os.path.basename(model_pdb)
     ext_idx=model_pdb_basename.rfind('.')
