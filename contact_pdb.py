@@ -348,6 +348,9 @@ def calc_lnat_acc_dist(cmp_list,con_num_dict,sep_range=str(short_range_def)):
                 )/len(top_pred[key]))**.5
             coef_sigma[key]=sum([e[4]/e[5] for e in top_pred[key]]
                 )/len(top_pred[key])
+        else:
+            ACC[key]=0
+            coef_sigma[key]=0
     return ACC,coef_sigma,top_pred
 
 def calc_lnat_acc_contact(cmp_list,con_num_dict,sep_range=str(short_range_def)):
@@ -417,6 +420,49 @@ def calc_acc_contact(cmp_list,L,sep_range=str(short_range_def)):
                 #)/len(top_pred[key])
         else:
             ACC[key]=0 # error
+    return ACC,top_pred
+
+
+def calc_acc_dist(cmp_list,con_num_dict,sep_range=str(short_range_def)):
+    '''Calculate residue contact accuracy using ouput if "compare_res_contact"
+    and native contact number diction "con_num_dict" '''
+    top_pred=dict() # top short, medm, long, all prediction
+    
+    if not sep_range in ["medium","long"]:
+        top_pred["short1"]=[res_pair for res_pair in cmp_list if \
+            short_range_def<=abs(res_pair[0]-res_pair[1])<medm_range_def][:L]
+        top_pred["short2"]=top_pred["short1"][:int(L/2)]
+        top_pred["short5"]=top_pred["short1"][:int(L/5)]
+
+    if not sep_range in ["short","long"]:
+        top_pred["medm1" ]=[res_pair for res_pair in cmp_list if \
+            medm_range_def<=abs(res_pair[0]-res_pair[1])<long_range_def][:L]
+        top_pred["medm2" ]=top_pred["medm1" ][:int(L/2)]
+        top_pred["medm5" ]=top_pred["medm1" ][:int(L/5)]
+
+    if not sep_range in ["short","medium"]:
+        top_pred["long1" ]=[res_pair for res_pair in cmp_list if \
+            long_range_def<=abs(res_pair[0]-res_pair[1])][:L]
+        top_pred["long2" ]=top_pred["long1" ][:int(L/2)]
+        top_pred["long5" ]=top_pred["long1" ][:int(L/5)]
+
+    if not sep_range in ["short","medium","long"]:
+        top_pred["all1"  ]=cmp_list[:L]
+        top_pred["all2"  ]=top_pred["all1"  ][:int(L/2)]
+        top_pred["all5"  ]=top_pred["all1"  ][:int(L/5)]
+
+    ACC=dict() # dRMSD 
+    #coef_sigma=dict() # coeficient of sigma 
+    for key in top_pred:
+        ACC[key]=0
+        if top_pred[key]:
+            ACC[key]=(sum([e[4]*e[4] for e in top_pred[key]]
+                )/len(top_pred[key]))**.5
+            #coef_sigma[key]=sum([e[4]/e[5] for e in top_pred[key]]
+                #)/len(top_pred[key])
+        else:
+            ACC[key]=0
+            #coef_sigma[key]=0
     return ACC,top_pred
 
 def calc_contact_num(res_con_list,L):
@@ -610,7 +656,10 @@ if __name__=="__main__":
                 sys.stdout.write('\t'.join(["scoef"]+['%.3f'%coef_sigma[key
                     ] for key in key_list])+'\n')
         elif outfmt=="stat":
-            ACC,top_pred=calc_acc_contact(cmp_list,L,sep_range)
+            if infmt!="dist":
+                ACC,top_pred=calc_acc_contact(cmp_list,L,sep_range)
+            else:
+                ACC,top_pred=calc_acc_dist(cmp_list,L,sep_range)
             if sep_range == "short":
                 key_list=["short1","short2","short5"]
             elif sep_range == "medium":
