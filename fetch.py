@@ -394,8 +394,8 @@ def extract_chain(PDB_file,chainID_list=[],
         atom_serial_list=[]
         for line in pdb_lines:
             section=line[:6].rstrip()
-            if section in chainID_column and (not chainID_column[section] \
-                or line[chainID_column[section]]==chainID):
+            if section in chainID_column and (not chainID_column[section] or (
+            chainID_column[section]<len(line) and line[chainID_column[section]]==chainID)):
                 if section in ("ATOM","HETATM"):
                     atom_serial_list.append(line[6:11])
                 elif section=="CONECT" and not line[6:11] in atom_serial_list:
