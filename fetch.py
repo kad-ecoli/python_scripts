@@ -195,8 +195,8 @@ def fetch_bundle(PDBid,no_err=False):
     # and software tools that rely solely on the PDB file format. 
     PDBid=PDBid.lower()
     tarball_name=PDBid+"-pdb-bundle.tar.gz"
-    return wget(pdb_bundle_mirror+PDBid[1:3]+'/'+PDBid+'/'+tarball_name
-        ,tarball_name,no_err)
+    url=pdb_bundle_mirror+PDBid[1:3]+'/'+PDBid+'/'+tarball_name
+    return wget(url, tarball_name,no_err)
 
 def extract_chain_from_bundle(tarball_name,chainID_list=[]):
     '''split best effort/minimal PDB tarball into PDB files containing 
@@ -394,8 +394,8 @@ def extract_chain(PDB_file,chainID_list=[],
         atom_serial_list=[]
         for line in pdb_lines:
             section=line[:6].rstrip()
-            if section in chainID_column and (not chainID_column[section] \
-                or line[chainID_column[section]]==chainID):
+            if section in chainID_column and (not chainID_column[section] or (
+            chainID_column[section]<len(line) and line[chainID_column[section]]==chainID)):
                 if section in ("ATOM","HETATM"):
                     atom_serial_list.append(line[6:11])
                 elif section=="CONECT" and not line[6:11] in atom_serial_list:
